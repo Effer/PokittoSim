@@ -3,6 +3,7 @@
 #define CELL_SIZE 16
 #define SIGN_SIZE 12
 #define CURSOR_SIZE 16
+#define MAX_GRID_SIZE 10
 
 Pokitto::Core game;
 Pokitto::Display disp;
@@ -19,14 +20,14 @@ typedef enum GameStates
     Credits
 } GameStates;
 
-typedef enum SignType
+typedef enum Symbol
 {
     None=0,
     Cross,
     Circle,
     Triangle,
     Diamond,
-} SignType;
+} Symbol;
 
 typedef struct
 {
@@ -39,14 +40,14 @@ typedef struct
     bool winner;
     Point from;
     Point to;
-    SignType sign;
+    Symbol symb;
 } WinnerLine;
 
 typedef struct
 {
+    Symbol symb;
     char x;
     char y;
-    SignType sign;
     short diameter=SIGN_SIZE;
     short time;
     short angle;
@@ -55,27 +56,73 @@ typedef struct
 typedef struct Player
 {
     bool AI;
-    SignType sign;
-
+    Symbol symb;
 } Player;
 
-char BOARDSIZE=3;
-char NUMPLAYERS=2;
-char SIGNS2WIN=3;
+typedef struct MenuItem
+{
+    char * description;
+    int minValue;
+    int maxValue;
+    int value;
+}MenuItem;
 
-Sign board[5][5];
+MenuItem menuSize;
+MenuItem menuSigns2Win;
+MenuItem menuNumPlayers;
+
+char setBoardSize=3;
+char setSigns2Win=3;
+char setNumPlayers=2;
+
+Sign board[MAX_GRID_SIZE][MAX_GRID_SIZE];
 Point cursor;
 
 Player players[4];
 char playerTurn=0;
 WinnerLine winnerLine;
 GameStates gameState;
-Point boardPosition= {.x=5,.y=5};
+Point boardPosition = {.x=5,.y=5};
 
 Sign scoreList[10];
 char scoreListIndx=0;
 
 uint32_t timer;
+
+void init()
+{
+    menuSize.description="Grid Size";
+    menuSize.minValue=2;
+    menuSize.maxValue=5;
+    menuSize.value=3;
+
+    menuSigns2Win.description="Signs to win";
+    menuSigns2Win.minValue=2;
+    menuSigns2Win.maxValue=5;
+    menuSigns2Win.value=3;
+
+    menuNumPlayers.description="# Players";
+    menuNumPlayers.minValue=2;
+    menuNumPlayers.maxValue=4;
+    menuNumPlayers.value=2;
+}
+
+void drawMenuItem(char x,char y,MenuItem item)
+{
+    game.display.print(x,y,item.description);
+    game.display.print(x+50,y,(int)item.value);
+}
+
+void drawMenu()
+{
+    char xo=10;
+    char yo=20;
+    drawMenuItem(xo,yo,menuSize);
+    yo+=10;
+    drawMenuItem(xo,yo,menuSigns2Win);
+    yo+=10;
+    drawMenuItem(xo,yo,menuNumPlayers);
+}
 
 void drawPolygon (short xc, short yc, short r, short n,float a)
 {
@@ -110,30 +157,30 @@ void drawCross (short xc, short yc, short r, short n,float a)
     }
 }
 
-void drawSign(Sign sign)
+void drawSign(Sign symb)
 {
-    if (sign.sign==Cross)
+    if (symb.symb==Cross)
     {
         disp.color=5;
-        drawCross(sign.x,sign.y,sign.diameter/2,4,-PI/4);
+        drawCross(symb.x,symb.y,symb.diameter/2,4,-PI/4);
     }
 
-    if (sign.sign==Circle)
+    if (symb.symb==Circle)
     {
         disp.color=6;
-        disp.drawCircle(sign.x,sign.y,sign.diameter/2);
+        disp.drawCircle(symb.x,symb.y,symb.diameter/2);
     }
 
-    if (sign.sign==Triangle)
+    if (symb.symb==Triangle)
     {
         disp.color=10;
-        drawPolygon(sign.x,sign.y,sign.diameter/2,3,-PI/2);
+        drawPolygon(symb.x,symb.y,symb.diameter/2,3,-PI/2);
     }
 
-    if (sign.sign==Diamond)
+    if (symb.symb==Diamond)
     {
-        disp.color=11;
-        drawPolygon(sign.x,sign.y,sign.diameter/2,4,-PI/2);
+        disp.color=3;
+        drawPolygon(symb.x,symb.y,symb.diameter/2,4,-PI/2);
     }
 }
 
@@ -151,13 +198,13 @@ void drawWinningLine(char xo,char yo)
 
 void drawGameType()
 {
-    disp.print((int)NUMPLAYERS);
-    disp.print("P ");
-    disp.print((int)BOARDSIZE);
+    disp.print((int)setBoardSize);
     disp.print("x");
-    disp.print((int)BOARDSIZE);
-    disp.print("  ");
-    disp.print((int)SIGNS2WIN);
+    disp.print((int)setBoardSize);
+    disp.print(" ");
+    disp.print((int)setNumPlayers);
+    disp.print("P ");
+    disp.print((int)setSigns2Win);
     disp.print(" to win");
 }
 
@@ -167,21 +214,21 @@ void drawBoard(char xo,char yo)
     char yc;
 
     //Vertical lines
-    disp.color=3;
-    for (char x=1; x<BOARDSIZE; x++)
+    disp.color=1;
+    for (char x=1; x<setBoardSize; x++)
     {
-        disp.drawLine(xo+(CELL_SIZE*x),yo,xo+(CELL_SIZE*x),yo+(CELL_SIZE*(BOARDSIZE)));
+        disp.drawLine(xo+(CELL_SIZE*x),yo,xo+(CELL_SIZE*x),yo+(CELL_SIZE*(setBoardSize)));
     }
     //Horizontal lines
-    for (char y=1; y<BOARDSIZE; y++)
+    for (char y=1; y<setBoardSize; y++)
     {
-        disp.drawLine(xo,yo+(CELL_SIZE*y),xo+CELL_SIZE*(BOARDSIZE),yo+(CELL_SIZE*y));
+        disp.drawLine(xo,yo+(CELL_SIZE*y),xo+CELL_SIZE*(setBoardSize),yo+(CELL_SIZE*y));
     }
 
     //Draw Cell
-    for (char x=0; x<BOARDSIZE; x++)
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
             //Calculate center of the cell
             xc=xo+(x*CELL_SIZE)+(CELL_SIZE/2);
@@ -196,7 +243,7 @@ void drawBoard(char xo,char yo)
                 drawPolygon(xc,yc,CURSOR_SIZE/2,4,-PI/4);
             }
 
-            //Draw sign of the board
+            //Draw symb of the board
             drawSign(board[x][y]);
         }
     }
@@ -215,90 +262,94 @@ void drawBoard(char xo,char yo)
 
 void initGame()
 {
-    BOARDSIZE=random(3,5);
-    NUMPLAYERS=random(2,4);
-    SIGNS2WIN=random(2,BOARDSIZE);
+    setBoardSize=random(3,5);
+    setNumPlayers=random(2,4);
+    setSigns2Win=random(2,setBoardSize);
+
+    boardPosition.x=((game.display.width-20)-(setBoardSize*CELL_SIZE))/2;
+    boardPosition.y=6+((game.display.height-6)-(setBoardSize*CELL_SIZE))/2;
 
     //
-    players[0].sign=Cross;
+    players[0].symb=Cross;
     players[0].AI=true;
 
-    players[1].sign=Diamond;
+    players[1].symb=Diamond;
     players[1].AI=true;
 
-    players[2].sign=Triangle;
+    players[2].symb=Triangle;
     players[2].AI=true;
 
-    players[3].sign=Circle;
+    players[3].symb=Circle;
     players[3].AI=true;
 
     //Initialize cursor position
-    cursor.x=floor(BOARDSIZE/2);
-    cursor.y=floor(BOARDSIZE/2);
+    cursor.x=floor(setBoardSize/2);
+    cursor.y=floor(setBoardSize/2);
 
     //reset winnerLine
     winnerLine.winner=false;
 
     //Initialize board
-    for (char x=0; x<BOARDSIZE; x++)
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
-            board[x][y].sign=None;
+            board[x][y].symb=None;
         }
     }
-
 }
 
 void updateMenu()
 {
-    if (btn.pressed(BTN_A) || true)
+    if (btn.pressed(BTN_A))
     {
         initGame();
         gameState=Move;
     }
+
+    drawMenu();
 }
 
 
-bool isWinner(SignType sign,char xm=-1,char ym=-1)
+bool isWinner(Sign originalBoard[MAX_GRID_SIZE][MAX_GRID_SIZE],Symbol symb,char xm=-1,char ym=-1)
 {
     char xc;
     char yc;
 
     //Copy board to test
-    Sign boardTest[BOARDSIZE][BOARDSIZE];
-    for (char x=0; x<BOARDSIZE; x++)
+    Sign boardTest[setBoardSize][setBoardSize];
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
-            boardTest[x][y]=board[x][y];
+            boardTest[x][y]=originalBoard[x][y];
         }
     }
 
     //If a move is request
     if(xm>-1 && ym>-1)
     {
-        //place the sign, if we can
-        if(boardTest[xm][ym].sign==None)
+        //place the symbol, if we can
+        if(boardTest[xm][ym].symb==None)
         {
-            boardTest[xm][ym].sign=sign;
+            boardTest[xm][ym].symb=symb;
         }
     }
 
     //NOW check all winning conditions
-
-    //horizontal win
-    for (char x=0; x<BOARDSIZE; x++)
+    bool win;
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
-            bool win=true;
-            for (char c=0; c<SIGNS2WIN; c++ )
+            //horizontal win
+            win=true;
+            for (char c=0; c<setSigns2Win; c++ )
             {
                 xc=c+x;
                 yc=y;
-                if(xc>=0 && xc<BOARDSIZE && yc>=0 && yc<BOARDSIZE)
-                    win=win && boardTest[xc][yc].sign==sign;
+                if(xc>=0 && xc<setBoardSize && yc>=0 && yc<setBoardSize)
+                    win=win && boardTest[xc][yc].symb==symb;
                 else
                     win=false;
             }
@@ -308,26 +359,20 @@ bool isWinner(SignType sign,char xm=-1,char ym=-1)
                 winnerLine.winner=true;
                 winnerLine.from.x=x;
                 winnerLine.from.y=y;
-                winnerLine.to.x=x+SIGNS2WIN-1;
+                winnerLine.to.x=x+setSigns2Win-1;
                 winnerLine.to.y=y;
-                winnerLine.sign=sign;
+                winnerLine.symb=symb;
                 return true;
             }
-        }
-    }
 
-    //vertical win
-    for (char y=0; y<BOARDSIZE; y++)
-    {
-        for (char x=0; x<BOARDSIZE; x++)
-        {
-            bool win=true;
-            for (char c=0; c<SIGNS2WIN; c++ )
+            //vertical win
+            win=true;
+            for (char c=0; c<setSigns2Win; c++ )
             {
                 xc=x;
                 yc=c+y;
-                if(xc>=0 && xc<BOARDSIZE && yc>=0 && yc<BOARDSIZE)
-                    win=win && boardTest[xc][yc].sign==sign;
+                if(xc>=0 && xc<setBoardSize && yc>=0 && yc<setBoardSize)
+                    win=win && boardTest[xc][yc].symb==symb;
                 else
                     win=false;
             }
@@ -336,27 +381,21 @@ bool isWinner(SignType sign,char xm=-1,char ym=-1)
             {
                 winnerLine.winner=true;
                 winnerLine.from.x=x;
-                winnerLine.from.y=0+y;
+                winnerLine.from.y=y;
                 winnerLine.to.x=x;
-                winnerLine.to.y=y+SIGNS2WIN-1;
-                winnerLine.sign=sign;
+                winnerLine.to.y=y+setSigns2Win-1;
+                winnerLine.symb=symb;
                 return true;
             }
-        }
-    }
 
-    //diagonal top/right win
-    for (char x=0; x<BOARDSIZE; x++)
-    {
-        for (char y=0; y<BOARDSIZE; y++)
-        {
-            bool win=true;
-            for (char c=0; c<SIGNS2WIN; c++ )
+            //diagonal top/right win
+            win=true;
+            for (char c=0; c<setSigns2Win; c++ )
             {
                 xc=c+x;
                 yc=c+y;
-                if(xc>=0 && xc<BOARDSIZE && yc>=0 && yc<BOARDSIZE)
-                    win=win && boardTest[xc][yc].sign==sign;
+                if(xc>=0 && xc<setBoardSize && yc>=0 && yc<setBoardSize)
+                    win=win && boardTest[xc][yc].symb==symb;
                 else
                     win=false;
             }
@@ -366,26 +405,20 @@ bool isWinner(SignType sign,char xm=-1,char ym=-1)
                 winnerLine.winner=true;
                 winnerLine.from.x=x;
                 winnerLine.from.y=y;
-                winnerLine.to.x=x+SIGNS2WIN-1;
-                winnerLine.to.y=y+SIGNS2WIN-1;
-                winnerLine.sign=sign;
+                winnerLine.to.x=x+setSigns2Win-1;
+                winnerLine.to.y=y+setSigns2Win-1;
+                winnerLine.symb=symb;
                 return true;
             }
-        }
-    }
 
-    //diagonal top/left win
-    for (char x=0; x<BOARDSIZE; x++)
-    {
-        for (char y=0; y<BOARDSIZE; y++)
-        {
-            bool win=true;
-            for (char c=0; c<SIGNS2WIN; c++ )
+            //diagonal top/left win
+            win=true;
+            for (char c=0; c<setSigns2Win; c++ )
             {
                 xc=-c+x;
                 yc=c+y;
-                if(xc>=0 && xc<BOARDSIZE && yc>=0 && yc<BOARDSIZE)
-                    win=win && boardTest[xc][yc].sign==sign;
+                if(xc>=0 && xc<setBoardSize && yc>=0 && yc<setBoardSize)
+                    win=win && boardTest[xc][yc].symb==symb;
                 else
                     win=false;
             }
@@ -395,9 +428,9 @@ bool isWinner(SignType sign,char xm=-1,char ym=-1)
                 winnerLine.winner=true;
                 winnerLine.from.x=x;
                 winnerLine.from.y=y;
-                winnerLine.to.x=x-SIGNS2WIN+1;
-                winnerLine.to.y=y+SIGNS2WIN-1;
-                winnerLine.sign=sign;
+                winnerLine.to.x=x-setSigns2Win+1;
+                winnerLine.to.y=y+setSigns2Win-1;
+                winnerLine.symb=symb;
                 return true;
             }
         }
@@ -407,14 +440,14 @@ bool isWinner(SignType sign,char xm=-1,char ym=-1)
     return false;
 }
 
-bool isDrawn()
+bool isDrawn(Sign originalBoard[MAX_GRID_SIZE][MAX_GRID_SIZE])
 {
     //All cells not None
-    for (char x=0; x<BOARDSIZE; x++)
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
-            if (board[x][y].sign==None)
+            if (originalBoard[x][y].symb==None)
             {
                 return false;
             }
@@ -424,17 +457,17 @@ bool isDrawn()
 }
 
 
-void AI(SignType sign)
+void AI(Symbol symb)
 {
     //Check if I can win
-    for (char x=0; x<BOARDSIZE; x++)
+    for (char x=0; x<setBoardSize; x++)
     {
-        for (char y=0; y<BOARDSIZE; y++)
+        for (char y=0; y<setBoardSize; y++)
         {
-            if (isWinner(sign,x,y))
+            if (isWinner(board,symb,x,y))
             {
                 //Place winning move
-                board[x][y].sign=sign;
+                board[x][y].symb=symb;
                 cursor.x=x;
                 cursor.y=y;
                 return;
@@ -442,18 +475,18 @@ void AI(SignType sign)
         }
     }
 
-    //Check if anyone can win
-    for(char p=0; p<NUMPLAYERS; p++)
+    //Check if anyone can win with a move
+    for(char p=0; p<setNumPlayers; p++)
     {
-        for (char x=0; x<BOARDSIZE; x++)
+        for (char x=0; x<setBoardSize; x++)
         {
-            for (char y=0; y<BOARDSIZE; y++)
+            for (char y=0; y<setBoardSize; y++)
             {
-                if (isWinner(players[p].sign,x,y))
+                if (isWinner(board,players[p].symb,x,y))
                 {
                     //Place winning move
                     winnerLine.winner=false; //Please FIXME!! Avoid drawing winning line when not need
-                    board[x][y].sign=sign;
+                    board[x][y].symb=symb;
                     cursor.x=x;
                     cursor.y=y;
                     return;
@@ -462,14 +495,20 @@ void AI(SignType sign)
         }
     }
 
+
+    //Check if I can win in 2 moves ???
+
+
+
+
     //place a random move
     while(true)
     {
-        char x=random(0,BOARDSIZE-1);
-        char y=random(0,BOARDSIZE-1);
-        if(board[x][y].sign==None)
+        char x=random(0,setBoardSize-1);
+        char y=random(0,setBoardSize-1);
+        if(board[x][y].symb==None)
         {
-            board[x][y].sign=sign;
+            board[x][y].symb=symb;
             cursor.x=x;
             cursor.y=y;
             return;
@@ -482,7 +521,7 @@ void updateGame()
     //Move
     if(players[playerTurn].AI)
     {
-        AI(players[playerTurn].sign);
+        AI(players[playerTurn].symb);
         gameState=Check;
     }
     else
@@ -493,22 +532,22 @@ void updateGame()
         if (btn.pressed(BTN_RIGHT)) cursor.x+=1;
 
         //Limit cursor to the board
-        cursor.x=abs(cursor.x%BOARDSIZE);
-        cursor.y=abs(cursor.y%BOARDSIZE);
+        cursor.x=abs(cursor.x%setBoardSize);
+        cursor.y=abs(cursor.y%setBoardSize);
 
         if (btn.pressed(BTN_A))
         {
-            if (board[cursor.x][cursor.y].sign==None)
+            if (board[cursor.x][cursor.y].symb==None)
             {
-                board[cursor.x][cursor.y].sign=players[playerTurn].sign;
+                board[cursor.x][cursor.y].symb=players[playerTurn].symb;
                 gameState=Check;
             }
         }
     }
 
-    //Draw player sign
+    //Draw player symb
     Sign playerSign;
-    playerSign.sign=players[playerTurn].sign;
+    playerSign.symb=players[playerTurn].symb;
     playerSign.x=100;
     playerSign.y=10;
     drawSign(playerSign);
@@ -520,14 +559,14 @@ void updateGame()
 
 void updateCheck()
 {
-    if(isWinner(players[playerTurn].sign))
+    if(isWinner(board,players[playerTurn].symb))
     {
         cursor.x=-1;
         cursor.y=-1;
         gameState=Winner;
         timer=game.getTime()+1000;
     }
-    else if (isDrawn())
+    else if (isDrawn(board))
     {
         cursor.x=-1;
         cursor.y=-1;
@@ -537,7 +576,7 @@ void updateCheck()
     else
     {
         playerTurn++;
-        playerTurn=playerTurn%NUMPLAYERS;
+        playerTurn=playerTurn%setNumPlayers;
         gameState=Move;
     }
 
@@ -559,11 +598,11 @@ void updateWin()
             scoreList[i].y+=SIGN_SIZE/2;
         }
 
-        //add winner sign
+        //add winner symbol
         Sign winSign;
         winSign.x=100;
         winSign.y=20;
-        winSign.sign=winnerLine.sign;
+        winSign.symb=winnerLine.symb;
         winSign.diameter=SIGN_SIZE/2;
         scoreList[scoreListIndx]=winSign;
         scoreListIndx=(scoreListIndx+1)%10;
@@ -587,6 +626,8 @@ void updateDrawn()
 
 int main ()
 {
+    init();
+
     game.begin();
     //game.display.loadRGBPalette(paletteDB16);
     game.display.setFont(fontMini);
