@@ -1,18 +1,24 @@
 #include "Pokitto.h"
+#include <stdlib.h>
+#include <map>
 
 #define CELL_SIZE 16
 #define SIGN_SIZE 12
 #define CURSOR_SIZE 16
 #define MAX_GRID_SIZE 10
 
+#define MAX_MENU_ITEMS 3
+
 Pokitto::Core game;
 Pokitto::Display disp;
 Pokitto::Sound snd;
 Pokitto::Buttons btn;
 
+
 typedef enum GameStates
 {
     Menu=0,
+    InitGame,
     Move,
     Check,
     Winner,
@@ -67,9 +73,10 @@ typedef struct MenuItem
     int value;
 }MenuItem;
 
-MenuItem menuSize;
-MenuItem menuSigns2Win;
-MenuItem menuNumPlayers;
+std::map<std::string,MenuItem> menuMap;
+
+MenuItem mainMenu[MAX_MENU_ITEMS];
+char menuIndex=0;
 
 char setBoardSize=3;
 char setSigns2Win=3;
@@ -89,39 +96,65 @@ char scoreListIndx=0;
 
 uint32_t timer;
 
-void init()
+int clip(int n, int lower, int upper) {
+  return std::max(lower, std::min(n, upper));
+}
+
+void LoadMenu()
 {
-    menuSize.description="Grid Size";
+    MenuItem menuSize;
+    menuSize.description="Board Size";
     menuSize.minValue=2;
     menuSize.maxValue=5;
     menuSize.value=3;
+    mainMenu[0]=menuSize;
+    menuMap[menuSize.description]=menuSize;
 
+    MenuItem menuSigns2Win;
     menuSigns2Win.description="Signs to win";
     menuSigns2Win.minValue=2;
     menuSigns2Win.maxValue=5;
     menuSigns2Win.value=3;
+    mainMenu[1]=menuSigns2Win;
+    menuMap[menuSigns2Win.description]=menuSigns2Win;
 
-    menuNumPlayers.description="# Players";
+    MenuItem menuNumPlayers;
+    menuNumPlayers.description="Players";
     menuNumPlayers.minValue=2;
     menuNumPlayers.maxValue=4;
     menuNumPlayers.value=2;
+    mainMenu[2]=menuNumPlayers;
+    menuMap[menuNumPlayers.description]=menuNumPlayers;
 }
 
 void drawMenuItem(char x,char y,MenuItem item)
 {
     game.display.print(x,y,item.description);
-    game.display.print(x+50,y,(int)item.value);
+    game.display.print(x+80,y,(int)item.value);
 }
 
 void drawMenu()
 {
     char xo=10;
-    char yo=20;
-    drawMenuItem(xo,yo,menuSize);
-    yo+=10;
-    drawMenuItem(xo,yo,menuSigns2Win);
-    yo+=10;
-    drawMenuItem(xo,yo,menuNumPlayers);
+    char yo=10;
+
+    //draw cursor
+    game.display.print(0,yo+(menuIndex*10),">");
+    //draw menu items
+    for (char m=0;m<MAX_MENU_ITEMS;m++)
+    {
+        drawMenuItem(xo,yo,mainMenu[m]);
+        yo+=10;
+    }
+
+    //std::map<std::string,MenuItem>::iterator it;
+    //for (it = menuMap.begin(); it != menuMap.end(); it++ )
+    //{
+    //    drawMenuItem(xo,yo,it->second);
+    //     yo+=10;
+    //}
+
+
 }
 
 void drawPolygon (short xc, short yc, short r, short n,float a)
@@ -262,9 +295,7 @@ void drawBoard(char xo,char yo)
 
 void initGame()
 {
-    setBoardSize=random(3,5);
-    setNumPlayers=random(2,4);
-    setSigns2Win=random(2,setBoardSize);
+    game.display.setFont(fontMini);
 
     boardPosition.x=((game.display.width-20)-(setBoardSize*CELL_SIZE))/2;
     boardPosition.y=6+((game.display.height-6)-(setBoardSize*CELL_SIZE))/2;
@@ -289,7 +320,7 @@ void initGame()
     //reset winnerLine
     winnerLine.winner=false;
 
-    //Initialize board
+    //Clear board
     for (char x=0; x<setBoardSize; x++)
     {
         for (char y=0; y<setBoardSize; y++)
@@ -297,16 +328,41 @@ void initGame()
             board[x][y].symb=None;
         }
     }
+
+    //Begin game
+    gameState=Move;
 }
 
 void updateMenu()
 {
+    game.display.setFont(font5x7);
+
+    //Scroll the menu settings
+    if (btn.pressed(BTN_DOWN)) menuIndex++;
+    if (btn.pressed(BTN_UP)) menuIndex--;
+    menuIndex=clip(menuIndex,0,MAX_MENU_ITEMS-1);
+
+    //Change menu values
+    if (btn.pressed(BTN_RIGHT))mainMenu[menuIndex].value++;
+    if (btn.pressed(BTN_LEFT))mainMenu[menuIndex].value--;
+    mainMenu[menuIndex].value=clip(mainMenu[menuIndex].value,mainMenu[menuIndex].minValue,mainMenu[menuIndex].maxValue);
+
+    //Start game
     if (btn.pressed(BTN_A))
     {
-        initGame();
-        gameState=Move;
+        setBoardSize=mainMenu[0].value;
+        setSigns2Win=mainMenu[1].value;
+        setNumPlayers=mainMenu[2].value;
+        gameState=InitGame;
     }
 
+    //Randomize data
+    if(btn.pressed((BTN_B)))
+    {
+        mainMenu[0].value=random(3,5); //board
+        mainMenu[1].value=random(2,mainMenu[0].value); //signs to win
+        mainMenu[2].value=random(2,4);//players
+    }
     drawMenu();
 }
 
@@ -545,11 +601,11 @@ void updateGame()
         }
     }
 
-    //Draw player symb
+    //Draw player symbol at top/right corner
     Sign playerSign;
     playerSign.symb=players[playerTurn].symb;
-    playerSign.x=100;
-    playerSign.y=10;
+    playerSign.x=game.display.width-(SIGN_SIZE/2);
+    playerSign.y=SIGN_SIZE/2;
     drawSign(playerSign);
 
     //Draw
@@ -600,46 +656,57 @@ void updateWin()
 
         //add winner symbol
         Sign winSign;
-        winSign.x=100;
-        winSign.y=20;
+        winSign.x=game.display.width-(SIGN_SIZE/2);
+        winSign.y=SIGN_SIZE*2;
         winSign.symb=winnerLine.symb;
         winSign.diameter=SIGN_SIZE/2;
         scoreList[scoreListIndx]=winSign;
         scoreListIndx=(scoreListIndx+1)%10;
 
-        gameState=Menu;
+        gameState=InitGame;
     }
+
 }
 
 void updateDrawn()
 {
     drawBoard(boardPosition.x,boardPosition.y);
-
     disp.print("It's a drawn");
 
     if (btn.pressed(BTN_A) || game.getTime()>timer)
     {
-        gameState=Menu;
+        gameState=InitGame;
     }
+
+
 }
 
 
 int main ()
 {
-    init();
+    LoadMenu();
 
     game.begin();
     //game.display.loadRGBPalette(paletteDB16);
-    game.display.setFont(fontMini);
+
 
     while (game.isRunning())
     {
         if (game.update())
         {
+              //Exit
+            if(btn.pressed((BTN_C)))
+            {
+                gameState=Menu;
+            }
+
             switch (gameState)
             {
             case Menu:
                 updateMenu();
+                break;
+            case InitGame:
+                initGame();
                 break;
             case Move:
                 updateGame();
