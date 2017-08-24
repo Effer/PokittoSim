@@ -7,13 +7,13 @@
 #define CURSOR_SIZE 16
 #define MAX_GRID_SIZE 10
 
+#define MAX_PLAYERS 4
 #define MAX_MENU_ITEMS 3
 
 Pokitto::Core game;
 Pokitto::Display disp;
 Pokitto::Sound snd;
 Pokitto::Buttons btn;
-
 
 typedef enum GameStates
 {
@@ -37,8 +37,8 @@ typedef enum Symbol
 
 typedef struct
 {
-    char x;
-    char y;
+    short x;
+    short y;
 } Point;
 
 typedef struct
@@ -52,11 +52,11 @@ typedef struct
 typedef struct
 {
     Symbol symb;
-    char x;
-    char y;
+    short x;
+    short y;
     short diameter=SIGN_SIZE;
     short time;
-    short angle;
+    float angle;
 } Sign;
 
 typedef struct Player
@@ -71,7 +71,7 @@ typedef struct MenuItem
     int minValue;
     int maxValue;
     int value;
-}MenuItem;
+} MenuItem;
 
 std::map<std::string,MenuItem> menuMap;
 
@@ -85,7 +85,7 @@ char setNumPlayers=2;
 Sign board[MAX_GRID_SIZE][MAX_GRID_SIZE];
 Point cursor;
 
-Player players[4];
+Player players[MAX_PLAYERS];
 char playerTurn=0;
 WinnerLine winnerLine;
 GameStates gameState;
@@ -96,8 +96,17 @@ char scoreListIndx=0;
 
 uint32_t timer;
 
-int clip(int n, int lower, int upper) {
-  return std::max(lower, std::min(n, upper));
+
+int clip(int n, int lower, int upper)
+{
+    if (n<lower) return lower;
+    if (n>upper) return upper;
+    return n;
+}
+
+inline float lerpf(float a, float b, float t)
+{
+    return a + (b - a) * t/100.0;
 }
 
 void LoadMenu()
@@ -105,7 +114,7 @@ void LoadMenu()
     MenuItem menuSize;
     menuSize.description="Board Size";
     menuSize.minValue=2;
-    menuSize.maxValue=5;
+    menuSize.maxValue=10;
     menuSize.value=3;
     mainMenu[0]=menuSize;
     menuMap[menuSize.description]=menuSize;
@@ -127,7 +136,7 @@ void LoadMenu()
     menuMap[menuNumPlayers.description]=menuNumPlayers;
 }
 
-void drawMenuItem(char x,char y,MenuItem item)
+void drawMenuItem(short x,short y,MenuItem item)
 {
     game.display.print(x,y,item.description);
     game.display.print(x+80,y,(int)item.value);
@@ -135,13 +144,13 @@ void drawMenuItem(char x,char y,MenuItem item)
 
 void drawMenu()
 {
-    char xo=10;
-    char yo=10;
+    short xo=10;
+    short yo=10;
 
     //draw cursor
     game.display.print(0,yo+(menuIndex*10),">");
     //draw menu items
-    for (char m=0;m<MAX_MENU_ITEMS;m++)
+    for (char m=0; m<MAX_MENU_ITEMS; m++)
     {
         drawMenuItem(xo,yo,mainMenu[m]);
         yo+=10;
@@ -153,14 +162,13 @@ void drawMenu()
     //    drawMenuItem(xo,yo,it->second);
     //     yo+=10;
     //}
-
-
 }
 
 void drawPolygon (short xc, short yc, short r, short n,float a)
 {
     short lastx;
     short lasty;
+    a-=PI/2;
     short x = round ((float)xc + (float)r * cos(a));
     short y= round ((float)yc + (float)r * sin(a));
 
@@ -179,10 +187,9 @@ void drawCross (short xc, short yc, short r, short n,float a)
 {
     short x;
     short y;
-
+    a-=PI/4;
     for (int i = 0; i < n; i++)
     {
-
         x = round ((float)xc + (float)r * cos(a));
         y = round ((float)yc + (float)r * sin(a));
         a = a + (2 * PI / n);
@@ -194,26 +201,26 @@ void drawSign(Sign symb)
 {
     if (symb.symb==Cross)
     {
-        disp.color=5;
-        drawCross(symb.x,symb.y,symb.diameter/2,4,-PI/4);
+        disp.color=1;
+        drawCross(symb.x,symb.y,symb.diameter/2,4,symb.angle);
     }
 
     if (symb.symb==Circle)
     {
-        disp.color=6;
-        disp.drawCircle(symb.x,symb.y,symb.diameter/2);
+        disp.color=2;
+        disp.drawCircle(symb.x,symb.y,(symb.diameter/2)*2*PI/symb.angle);
     }
 
     if (symb.symb==Triangle)
     {
-        disp.color=10;
-        drawPolygon(symb.x,symb.y,symb.diameter/2,3,-PI/2);
+        disp.color=3;
+        drawPolygon(symb.x,symb.y,symb.diameter/2,3,symb.angle);
     }
 
     if (symb.symb==Diamond)
     {
-        disp.color=3;
-        drawPolygon(symb.x,symb.y,symb.diameter/2,4,-PI/2);
+        disp.color=1;
+        drawPolygon(symb.x,symb.y,symb.diameter/2,4,symb.angle);
     }
 }
 
@@ -241,10 +248,10 @@ void drawGameType()
     disp.print(" to win");
 }
 
-void drawBoard(char xo,char yo)
+void drawBoard(short xo,short yo)
 {
-    char xc;
-    char yc;
+    short xc;
+    short yc;
 
     //Vertical lines
     disp.color=1;
@@ -263,6 +270,10 @@ void drawBoard(char xo,char yo)
     {
         for (char y=0; y<setBoardSize; y++)
         {
+            //apply update
+            if ( board[x][y].time<100) board[x][y].time+=5;
+            board[x][y].angle=lerpf(0,2*PI,board[x][y].time);
+
             //Calculate center of the cell
             xc=xo+(x*CELL_SIZE)+(CELL_SIZE/2);
             yc=yo+(y*CELL_SIZE)+(CELL_SIZE/2);
@@ -367,10 +378,10 @@ void updateMenu()
 }
 
 
-bool isWinner(Sign originalBoard[MAX_GRID_SIZE][MAX_GRID_SIZE],Symbol symb,char xm=-1,char ym=-1)
+bool isWinner(Sign originalBoard[MAX_GRID_SIZE][MAX_GRID_SIZE],Symbol symb,short xm=-1,short ym=-1)
 {
-    char xc;
-    char yc;
+    short xc;
+    short yc;
 
     //Copy board to test
     Sign boardTest[setBoardSize][setBoardSize];
@@ -523,6 +534,7 @@ void AI(Symbol symb)
             if (isWinner(board,symb,x,y))
             {
                 //Place winning move
+                board[x][y].time=0;
                 board[x][y].symb=symb;
                 cursor.x=x;
                 cursor.y=y;
@@ -541,6 +553,7 @@ void AI(Symbol symb)
                 if (isWinner(board,players[p].symb,x,y))
                 {
                     //Place winning move
+                    board[x][y].time=0;
                     winnerLine.winner=false; //Please FIXME!! Avoid drawing winning line when not need
                     board[x][y].symb=symb;
                     cursor.x=x;
@@ -555,8 +568,6 @@ void AI(Symbol symb)
     //Check if I can win in 2 moves ???
 
 
-
-
     //place a random move
     while(true)
     {
@@ -564,6 +575,7 @@ void AI(Symbol symb)
         char y=random(0,setBoardSize-1);
         if(board[x][y].symb==None)
         {
+            board[x][y].time=0;
             board[x][y].symb=symb;
             cursor.x=x;
             cursor.y=y;
@@ -595,6 +607,7 @@ void updateGame()
         {
             if (board[cursor.x][cursor.y].symb==None)
             {
+                board[cursor.x][cursor.y].time=0;
                 board[cursor.x][cursor.y].symb=players[playerTurn].symb;
                 gameState=Check;
             }
@@ -684,6 +697,7 @@ void updateDrawn()
 
 int main ()
 {
+
     LoadMenu();
 
     game.begin();
@@ -694,7 +708,7 @@ int main ()
     {
         if (game.update())
         {
-              //Exit
+            //Exit
             if(btn.pressed((BTN_C)))
             {
                 gameState=Menu;
