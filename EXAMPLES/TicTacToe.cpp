@@ -1,14 +1,107 @@
 #include "Pokitto.h"
-#include <stdlib.h>
-#include <map>
 
-#define CELL_SIZE 16
-#define SIGN_SIZE 12
-#define CURSOR_SIZE 16
+#define CELL_SIZE 16*2
+#define SIGN_SIZE 10*2
+#define CURSOR_SIZE 18*2
+
 #define MAX_GRID_SIZE 10
 
 #define MAX_PLAYERS 4
-#define MAX_MENU_ITEMS 3
+#define MAX_MENU_SETTINGS 7
+
+
+const uint8_t logo[] =
+{
+188,38,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,21,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,21,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,21,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,64,0,0,0,0,0,0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,64,0,0,0,0,0,0,0,0,0,0,
+0,1,85,85,85,64,0,0,0,0,0,0,0,0,0,0,85,85,85,80,1,0,0,0,0,0,0,0,0,0,0,0,1,85,85,85,64,0,0,0,0,0,0,0,0,0,0,
+0,5,85,85,85,0,85,0,0,5,85,80,0,0,0,1,85,85,85,64,21,64,0,0,0,0,21,85,64,0,0,0,5,85,85,85,0,21,85,0,0,0,5,85,0,0,0,
+0,21,85,85,64,1,85,0,0,21,85,84,0,0,0,5,85,85,80,0,85,80,0,0,0,1,85,85,64,0,0,0,21,85,85,64,0,85,85,80,0,0,85,85,64,0,0,
+0,80,5,80,0,0,85,0,1,80,5,84,0,0,0,20,1,84,0,0,5,84,0,0,0,5,64,85,64,0,0,0,80,5,80,0,1,85,85,84,0,1,80,21,80,0,0,
+0,0,5,64,0,0,21,0,1,64,0,0,0,0,0,0,1,80,0,0,1,85,0,0,0,20,0,0,0,0,0,0,0,5,64,0,5,64,5,85,0,5,64,5,80,0,0,
+0,0,5,64,0,0,21,0,5,0,0,0,0,0,0,0,1,80,0,0,0,85,64,0,0,84,0,0,0,0,0,0,0,5,64,0,5,0,0,85,64,21,0,5,64,0,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,0,21,80,0,0,84,0,0,0,0,0,0,0,5,64,0,21,0,0,21,80,20,0,85,85,84,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,0,21,80,0,0,80,0,0,0,0,0,0,0,5,64,0,21,0,0,5,80,85,85,85,85,80,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,0,85,84,0,1,80,0,0,0,0,0,0,0,5,64,0,21,0,0,5,80,85,85,85,85,64,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,1,65,85,0,1,80,0,0,0,0,0,0,0,5,64,0,21,0,0,1,80,84,0,0,0,0,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,21,0,85,64,1,84,0,0,0,0,0,0,0,5,64,0,21,64,0,1,64,84,0,0,0,0,0,
+0,0,5,64,0,0,21,0,21,0,0,0,0,0,0,0,1,80,0,0,21,0,21,80,1,84,0,0,0,0,0,0,0,5,64,0,21,64,0,1,64,85,0,0,0,0,0,
+0,0,5,64,0,0,21,0,21,64,0,5,0,0,0,0,1,80,0,0,21,0,21,84,0,85,0,0,16,0,0,0,0,5,64,0,21,80,0,5,0,85,64,0,0,0,0,
+0,0,5,65,0,0,21,0,21,80,0,85,0,0,0,0,1,80,64,0,21,64,85,85,0,85,64,1,80,0,0,0,0,5,65,0,5,85,64,20,0,21,80,0,0,0,0,
+0,0,5,85,0,0,21,84,5,85,85,84,0,0,0,0,1,85,64,0,21,85,81,85,64,85,85,85,80,0,0,0,0,5,85,0,1,85,85,80,0,21,85,85,64,0,0,
+0,0,5,84,0,0,21,80,1,85,85,80,0,0,0,0,1,85,0,0,5,85,0,85,0,21,85,85,0,0,0,0,0,5,84,0,0,85,85,64,0,1,85,85,0,0,0,
+0,0,1,80,0,0,21,64,0,21,85,0,0,0,0,0,0,84,0,0,1,80,0,16,0,1,85,80,0,0,0,0,0,1,80,0,0,5,84,0,0,0,85,80,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+};
+
+
+
+
+const uint8_t AI_logo[] =
+{
+    20,14,
+    0,0,0,0,0,
+    0,85,85,85,0,
+    1,85,85,85,64,
+    1,0,0,0,64,
+    1,0,0,0,64,
+    1,1,65,64,64,
+    1,1,65,64,64,
+    1,0,0,0,64,
+    1,0,0,0,64,
+    1,0,85,0,64,
+    1,0,20,0,64,
+    1,0,0,0,64,
+    1,0,0,0,64,
+    1,85,85,85,64,
+};
+
+
+const uint8_t P_logo[] =
+{
+    20,14,
+    0,0,85,0,0,
+    0,1,85,64,0,
+    0,1,85,64,0,
+    0,1,20,64,0,
+    0,5,85,80,0,
+    0,5,85,80,0,
+    0,1,20,64,0,
+    0,1,65,64,0,
+    0,0,85,0,0,
+    0,0,20,0,0,
+    0,21,85,84,0,
+    0,85,65,85,0,
+    0,85,85,85,0,
+    0,85,65,85,0,
+};
+
+
+
+
+
+
+double const PI2 = PI/2.0;
+double const PI4 = PI/4.0;
 
 Pokitto::Core game;
 Pokitto::Display disp;
@@ -47,6 +140,7 @@ typedef struct
     Point from;
     Point to;
     Symbol symb;
+    short time;
 } WinnerLine;
 
 typedef struct
@@ -71,11 +165,11 @@ typedef struct MenuItem
     int minValue;
     int maxValue;
     int value;
+    bool asBool;
 } MenuItem;
 
-std::map<std::string,MenuItem> menuMap;
 
-MenuItem mainMenu[MAX_MENU_ITEMS];
+MenuItem mainMenu[MAX_MENU_SETTINGS];
 char menuIndex=0;
 
 char setBoardSize=3;
@@ -106,69 +200,100 @@ int clip(int n, int lower, int upper)
 
 inline float lerpf(float a, float b, float t)
 {
-    return a + (b - a) * t/100.0;
+    return a + (b - a) * cos(PI2*t/100.0);
 }
 
-void LoadMenu()
+void initMenu()
 {
     MenuItem menuSize;
-    menuSize.description="Board Size";
+    menuSize.description="Board Size (NxN)";
     menuSize.minValue=2;
-    menuSize.maxValue=10;
+    menuSize.maxValue=5;
     menuSize.value=3;
+    menuSize.asBool=false;
     mainMenu[0]=menuSize;
-    menuMap[menuSize.description]=menuSize;
 
     MenuItem menuSigns2Win;
     menuSigns2Win.description="Signs to win";
     menuSigns2Win.minValue=2;
     menuSigns2Win.maxValue=5;
     menuSigns2Win.value=3;
+    menuSigns2Win.asBool=false;
     mainMenu[1]=menuSigns2Win;
-    menuMap[menuSigns2Win.description]=menuSigns2Win;
 
     MenuItem menuNumPlayers;
-    menuNumPlayers.description="Players";
+    menuNumPlayers.description="Number of players";
     menuNumPlayers.minValue=2;
     menuNumPlayers.maxValue=4;
     menuNumPlayers.value=2;
+    menuNumPlayers.asBool=false;
     mainMenu[2]=menuNumPlayers;
-    menuMap[menuNumPlayers.description]=menuNumPlayers;
+
+    MenuItem P1Settings;
+    P1Settings.description="Player 1";
+    P1Settings.minValue=0;
+    P1Settings.maxValue=1;
+    P1Settings.value=0;
+    P1Settings.asBool=true;
+    mainMenu[3]=P1Settings;
+
+    MenuItem P2Settings;
+    P2Settings.description="Player 2";
+    P2Settings.minValue=0;
+    P2Settings.maxValue=1;
+    P2Settings.value=1;
+    P2Settings.asBool=true;
+    mainMenu[4]=P2Settings;
+
+    MenuItem P3Settings;
+    P3Settings.description="Player 3";
+    P3Settings.minValue=0;
+    P3Settings.maxValue=1;
+    P3Settings.value=1;
+    P3Settings.asBool=true;
+    mainMenu[5]=P3Settings;
+
+    MenuItem P4Settings;
+    P4Settings.description="Player 4";
+    P4Settings.minValue=0;
+    P4Settings.maxValue=1;
+    P4Settings.value=1;
+    P4Settings.asBool=true;
+    mainMenu[6]=P4Settings;
+
 }
 
 void drawMenuItem(short x,short y,MenuItem item)
 {
-    game.display.print(x,y,item.description);
-    game.display.print(x+80,y,(int)item.value);
-}
+    disp.color=1;
+    disp.print(x,y,item.description);
 
-void drawMenu()
-{
-    short xo=10;
-    short yo=10;
 
-    //draw cursor
-    game.display.print(0,yo+(menuIndex*10),">");
-    //draw menu items
-    for (char m=0; m<MAX_MENU_ITEMS; m++)
+    if(item.asBool)
     {
-        drawMenuItem(xo,yo,mainMenu[m]);
-        yo+=10;
-    }
+        if (item.value==1)
+        {
+            disp.drawBitmap(x+112,y-(AI_logo[1]/2)+3,AI_logo);
+        }
+        else
+        {
+            disp.drawBitmap(x+112,y-(AI_logo[1]/2)+3,P_logo);
+        }
 
-    //std::map<std::string,MenuItem>::iterator it;
-    //for (it = menuMap.begin(); it != menuMap.end(); it++ )
-    //{
-    //    drawMenuItem(xo,yo,it->second);
-    //     yo+=10;
-    //}
+    }
+    else
+    {
+        disp.color=2;
+        disp.print(x+120,y,(int)item.value);
+    }
 }
+
 
 void drawPolygon (short xc, short yc, short r, short n,float a)
 {
     short lastx;
     short lasty;
-    a-=PI/2;
+    a-=PI2;
     short x = round ((float)xc + (float)r * cos(a));
     short y= round ((float)yc + (float)r * sin(a));
 
@@ -179,11 +304,11 @@ void drawPolygon (short xc, short yc, short r, short n,float a)
         a = a + (2 * PI / n);
         x = round ((float)xc + (float)r * cos(a));
         y = round ((float)yc + (float)r * sin(a));
-        game.display.drawLine(lastx, lasty, x, y);
+        disp.drawLine(lastx, lasty, x, y);
     }
 }
 
-void drawCross (short xc, short yc, short r, short n,float a)
+void drawCross(short xc, short yc, short r, short n,float a)
 {
     short x;
     short y;
@@ -193,7 +318,7 @@ void drawCross (short xc, short yc, short r, short n,float a)
         x = round ((float)xc + (float)r * cos(a));
         y = round ((float)yc + (float)r * sin(a));
         a = a + (2 * PI / n);
-        game.display.drawLine(xc, yc, x, y);
+        disp.drawLine(xc, yc, x, y);
     }
 }
 
@@ -208,7 +333,7 @@ void drawSign(Sign symb)
     if (symb.symb==Circle)
     {
         disp.color=2;
-        disp.drawCircle(symb.x,symb.y,(symb.diameter/2)*2*PI/symb.angle);
+        disp.drawCircle(symb.x,symb.y,symb.diameter/2-sin(symb.angle)*symb.diameter/5.0);// symb.diameter/2 + 2*PI/symb.angle );
     }
 
     if (symb.symb==Triangle)
@@ -224,26 +349,86 @@ void drawSign(Sign symb)
     }
 }
 
-void drawWinningLine(char xo,char yo)
+void drawRectangle(short x1,short y1,short x2,short y2,double width)
 {
-    if(winnerLine.winner)
+    Point pp[4];
+    double angle=-atan2(y1-y2,x1-x2);
+
+    pp[0].x=x1+width*sin(angle+PI4);
+    pp[0].y=y1+width*cos(angle+PI4);
+    pp[1].x=x2+width*sin(angle-PI4);
+    pp[1].y=y2+width*cos(angle-PI4);
+
+    pp[2].x=x2+width*sin(angle-PI2-PI4);
+    pp[2].y=y2+width*cos(angle-PI2-PI4);
+    pp[3].x=x1+width*sin(angle+PI2+PI4);
+    pp[3].y=y1+width*cos(angle+PI2+PI4);
+
+    disp.drawLine(pp[0].x,pp[0].y,pp[1].x,pp[1].y);
+    disp.drawLine(pp[1].x,pp[1].y,pp[2].x,pp[2].y);
+    disp.drawLine(pp[2].x,pp[2].y,pp[3].x,pp[3].y);
+    disp.drawLine(pp[3].x,pp[3].y,pp[0].x,pp[0].y);
+
+}
+
+void drawWinningLine(char xo,char yo,WinnerLine win)
+{
+    if(win.winner)
     {
-        disp.color=7;
-        disp.drawLine(xo+winnerLine.from.x * CELL_SIZE + CELL_SIZE/2,
-                      yo+winnerLine.from.y * CELL_SIZE+ CELL_SIZE/2,
-                      xo+winnerLine.to.x * CELL_SIZE+ CELL_SIZE/2,
-                      yo+winnerLine.to.y * CELL_SIZE+ CELL_SIZE/2);
+        disp.color=3;
+//        drawRectangle(xo+win.from.x * CELL_SIZE + CELL_SIZE/2,
+//                      yo+win.from.y * CELL_SIZE+ CELL_SIZE/2,
+//                      xo+win.to.x * CELL_SIZE+ CELL_SIZE/2,
+//                      yo+win.to.y * CELL_SIZE+ CELL_SIZE/2,
+//                      lerpf(SIGN_SIZE*4/5,SIGN_SIZE/4,win.time));
+
+        drawRectangle(xo+win.from.x * CELL_SIZE + CELL_SIZE/2,
+                      yo+win.from.y * CELL_SIZE+ CELL_SIZE/2,
+                      xo+win.to.x * CELL_SIZE+ CELL_SIZE/2,
+                      yo+win.to.y * CELL_SIZE+ CELL_SIZE/2,
+                      lerpf(SIGN_SIZE,SIGN_SIZE/4,win.time));
     }
+}
+
+
+void drawMenu()
+{
+    short xo;
+    short yo;
+
+    xo=(disp.width-logo[0])/2;
+
+    //draw logo
+    disp.drawBitmap(xo,0,logo);
+
+    yo=logo[1];
+    xo=40;
+
+    //draw cursor
+    disp.color=3;
+    disp.print(xo-10,yo+(menuIndex*16),">");
+    //draw menu items
+    for (char m=0; m<sizeof(mainMenu)/sizeof(MenuItem); m++)
+    {
+        drawMenuItem(xo,yo,mainMenu[m]);
+        yo+=16;
+    }
+
+    //draw instructions
+    disp.color=3;
+    disp.print(30,disp.height-30,"     Up/Down select menu");
+    disp.print(30,disp.height-20,"  Left/Right change value");
+    disp.print(30,disp.height-10,"A=Start Game B=Shuffle C=Menu");
 }
 
 void drawGameType()
 {
+    disp.print((int)setNumPlayers);
+    disp.print("P ");
     disp.print((int)setBoardSize);
     disp.print("x");
     disp.print((int)setBoardSize);
     disp.print(" ");
-    disp.print((int)setNumPlayers);
-    disp.print("P ");
     disp.print((int)setSigns2Win);
     disp.print(" to win");
 }
@@ -270,7 +455,7 @@ void drawBoard(short xo,short yo)
     {
         for (char y=0; y<setBoardSize; y++)
         {
-            //apply update
+            //update symbol angle
             if ( board[x][y].time<100) board[x][y].time+=5;
             board[x][y].angle=lerpf(0,2*PI,board[x][y].time);
 
@@ -283,17 +468,14 @@ void drawBoard(short xo,short yo)
             //Draw cursor
             if (cursor.x==x && cursor.y==y)
             {
-                disp.color=7;
+                disp.color=3;
                 drawPolygon(xc,yc,CURSOR_SIZE/2,4,-PI/4);
             }
 
-            //Draw symb of the board
+            //Draw symbol of the board
             drawSign(board[x][y]);
         }
     }
-
-    //Winner line
-    drawWinningLine(xo,yo);
 
     //draw winner list
     for (int i=0; i<10; i++)
@@ -306,23 +488,9 @@ void drawBoard(short xo,short yo)
 
 void initGame()
 {
-    game.display.setFont(fontMini);
-
-    boardPosition.x=((game.display.width-20)-(setBoardSize*CELL_SIZE))/2;
-    boardPosition.y=6+((game.display.height-6)-(setBoardSize*CELL_SIZE))/2;
-
-    //
-    players[0].symb=Cross;
-    players[0].AI=true;
-
-    players[1].symb=Diamond;
-    players[1].AI=true;
-
-    players[2].symb=Triangle;
-    players[2].AI=true;
-
-    players[3].symb=Circle;
-    players[3].AI=true;
+    //Center board
+    boardPosition.x=((disp.width-20)-(setBoardSize*CELL_SIZE))/2;
+    boardPosition.y=6+((disp.height-6)-(setBoardSize*CELL_SIZE))/2;
 
     //Initialize cursor position
     cursor.x=floor(setBoardSize/2);
@@ -346,12 +514,10 @@ void initGame()
 
 void updateMenu()
 {
-    game.display.setFont(font5x7);
-
     //Scroll the menu settings
     if (btn.pressed(BTN_DOWN)) menuIndex++;
     if (btn.pressed(BTN_UP)) menuIndex--;
-    menuIndex=clip(menuIndex,0,MAX_MENU_ITEMS-1);
+    menuIndex=clip(menuIndex,0,MAX_MENU_SETTINGS-1);
 
     //Change menu values
     if (btn.pressed(BTN_RIGHT))mainMenu[menuIndex].value++;
@@ -364,6 +530,21 @@ void updateMenu()
         setBoardSize=mainMenu[0].value;
         setSigns2Win=mainMenu[1].value;
         setNumPlayers=mainMenu[2].value;
+
+        //
+        players[0].symb=Cross;
+        players[0].AI=mainMenu[3].value==1;
+
+        players[1].symb=Circle;
+        players[1].AI=mainMenu[4].value==1;
+
+        players[2].symb=Triangle;
+        players[2].AI=mainMenu[5].value==1;
+
+        players[3].symb=Diamond;
+        players[3].AI=mainMenu[6].value==1;
+
+
         gameState=InitGame;
     }
 
@@ -373,6 +554,11 @@ void updateMenu()
         mainMenu[0].value=random(3,5); //board
         mainMenu[1].value=random(2,mainMenu[0].value); //signs to win
         mainMenu[2].value=random(2,4);//players
+
+        mainMenu[3].value=random(0,1);//P1 AI
+        mainMenu[4].value=random(0,1);//P2 AI
+        mainMenu[5].value=random(0,1);//P3 AI
+        mainMenu[6].value=random(0,1);//P4 AI
     }
     drawMenu();
 }
@@ -405,6 +591,7 @@ bool isWinner(Sign originalBoard[MAX_GRID_SIZE][MAX_GRID_SIZE],Symbol symb,short
 
     //NOW check all winning conditions
     bool win;
+    winnerLine.time=0;
     for (char x=0; x<setBoardSize; x++)
     {
         for (char y=0; y<setBoardSize; y++)
@@ -554,7 +741,6 @@ void AI(Symbol symb)
                 {
                     //Place winning move
                     board[x][y].time=0;
-                    winnerLine.winner=false; //Please FIXME!! Avoid drawing winning line when not need
                     board[x][y].symb=symb;
                     cursor.x=x;
                     cursor.y=y;
@@ -600,8 +786,11 @@ void updateGame()
         if (btn.pressed(BTN_RIGHT)) cursor.x+=1;
 
         //Limit cursor to the board
-        cursor.x=abs(cursor.x%setBoardSize);
-        cursor.y=abs(cursor.y%setBoardSize);
+        if (cursor.x>=setBoardSize) cursor.x=0;
+        if (cursor.x<0) cursor.x=setBoardSize-1;
+        if (cursor.y>=setBoardSize) cursor.y=0;
+        if (cursor.y<0) cursor.y=setBoardSize-1;
+
 
         if (btn.pressed(BTN_A))
         {
@@ -617,7 +806,7 @@ void updateGame()
     //Draw player symbol at top/right corner
     Sign playerSign;
     playerSign.symb=players[playerTurn].symb;
-    playerSign.x=game.display.width-(SIGN_SIZE/2);
+    playerSign.x=disp.width-(SIGN_SIZE/2);
     playerSign.y=SIGN_SIZE/2;
     drawSign(playerSign);
 
@@ -659,6 +848,10 @@ void updateWin()
     drawBoard(boardPosition.x,boardPosition.y);
     disp.println("There's a winner!");
 
+    //Winner line
+    if (winnerLine.time <100) winnerLine.time+=20;
+    drawWinningLine(boardPosition.x,boardPosition.y,winnerLine);
+
     if (btn.pressed(BTN_A) || game.getTime()>timer)
     {
         //move list symbols
@@ -669,7 +862,7 @@ void updateWin()
 
         //add winner symbol
         Sign winSign;
-        winSign.x=game.display.width-(SIGN_SIZE/2);
+        winSign.x=disp.width-(SIGN_SIZE/2);
         winSign.y=SIGN_SIZE*2;
         winSign.symb=winnerLine.symb;
         winSign.diameter=SIGN_SIZE/2;
@@ -678,7 +871,6 @@ void updateWin()
 
         gameState=InitGame;
     }
-
 }
 
 void updateDrawn()
@@ -690,30 +882,31 @@ void updateDrawn()
     {
         gameState=InitGame;
     }
-
-
 }
 
 
 int main ()
 {
-
-    LoadMenu();
-
+    initMenu();
     game.begin();
-    //game.display.loadRGBPalette(paletteDB16);
 
+    //load palette
+    disp.palette[0]=COLOR_BLACK;
+    disp.palette[1]=COLOR_WHITE;
+    disp.palette[2]=COLOR_GREEN;
+    disp.palette[3]=COLOR_RED;
 
     while (game.isRunning())
     {
         if (game.update())
         {
-            //Exit
+            //Exit to menu
             if(btn.pressed((BTN_C)))
             {
                 gameState=Menu;
             }
 
+            //Game states
             switch (gameState)
             {
             case Menu:
