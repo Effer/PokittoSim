@@ -179,7 +179,7 @@ WinnerLine winnerLine;
 GameStates gameState;
 Point boardPosition = {.x=5,.y=5};
 
-Sign scoreList[10];
+Sign scoreList[14];
 char scoreListIndx=0;
 
 uint32_t timer;
@@ -228,7 +228,7 @@ void initMenu()
     P1Settings.description="Player 1";
     P1Settings.minValue=0;
     P1Settings.maxValue=1;
-    P1Settings.value=1;
+    P1Settings.value=0;
     P1Settings.asBool=true;
     mainMenu[3]=P1Settings;
 
@@ -344,14 +344,14 @@ void drawSign(Sign symb)
     }
 }
 
-void drawRectangle(short x1,short y1,short x2,short y2,double width,double offsetAngle)
+void drawRectangle(double x1,double y1,double x2,double y2,double width,double offsetAngle)
 {
     Point pp[4];
-    //Orignal angle
+    //Base angle
     double angle=-atan2(y1-y2,x1-x2)+PI2;
 
-    short xc=(x1+x2)/2;
-    short yc=(y1+y2)/2;
+    double xc=(x1+x2)/2;
+    double yc=(y1+y2)/2;
     double d2=sqrt(((x1-x2)*(x1-x2))+((y1-y2)*(y1-y2)))/2;
 
     x1=xc+d2*sin(angle+offsetAngle);
@@ -359,7 +359,7 @@ void drawRectangle(short x1,short y1,short x2,short y2,double width,double offse
     x2=xc+d2*sin(angle+offsetAngle-PI);
     y2=yc+d2*cos(angle+offsetAngle-PI);
 
-    //Recalculate angle after offset applied
+    //Recalculate angle after offset angle is applied
     angle=-atan2(y1-y2,x1-x2);
 
     pp[0].x=x1+width*sin(angle+PI4);
@@ -367,18 +367,17 @@ void drawRectangle(short x1,short y1,short x2,short y2,double width,double offse
     pp[1].x=x2+width*sin(angle-PI4);
     pp[1].y=y2+width*cos(angle-PI4);
 
-    pp[2].x=x2+width*sin(angle-PI2-PI4);
-    pp[2].y=y2+width*cos(angle-PI2-PI4);
-    pp[3].x=x1+width*sin(angle+PI2+PI4);
-    pp[3].y=y1+width*cos(angle+PI2+PI4);
+    pp[2].x=x2+width*sin(angle-PI3_4);
+    pp[2].y=y2+width*cos(angle-PI3_4);
+    pp[3].x=x1+width*sin(angle+PI3_4);
+    pp[3].y=y1+width*cos(angle+PI3_4);
 
     for(short i=0;i<4;i++)
     {
       disp.drawLine(pp[i].x,pp[i].y,pp[(i+1)%4].x,pp[(i+1)%4].y);
-      disp.drawLine(xc,yc,pp[i].x,pp[i].y);
+      //disp.drawLine(xc,yc,pp[i].x,pp[i].y);
     }
-
-    disp.drawLine(x1,y1,x2,y2);
+    //disp.drawLine(x1,y1,x2,y2);
 
 }
 
@@ -391,7 +390,8 @@ void drawWinningLine(short xo,short yo,WinnerLine win)
     double a=lerp(0.0,2.0*PI,(double)win.time);
 
     disp.color=3;
-    drawRectangle(x1,y1,x2,y2,SIGN_SIZE,a);
+    //drawRectangle(x1,y1,x2,y2,SIGN_SIZE,a);
+    drawRectangle(x1,y1,x2,y2,SIGN_SIZE-2,a);
 }
 
 void drawMenu()
@@ -419,23 +419,19 @@ void drawMenu()
 
     //draw instructions
     disp.color=3;
-    disp.print(30,disp.height-30,"     Up/Down select menu");
-    disp.print(30,disp.height-20,"  Left/Right change value");
-    disp.print(30,disp.height-10,"A=Start Game B=Shuffle C=Menu");
-
-
-    drawRectangle(30,30,160,160,16,game.frameCount*PI/100.0);
-
+    disp.print(25,disp.height-30,"       Up/Down select menu");
+    disp.print(25,disp.height-20,"    Left/Right change value");
+    disp.print(25,disp.height-10,"A=Start Game B=Shuffle C=Menu");
 }
 
-void drawGameType()
+void drawGameInfo()
 {
     disp.print((int)setNumPlayers);
-    disp.print("P ");
+    disp.print("P [");
     disp.print((int)setBoardSize);
     disp.print("x");
     disp.print((int)setBoardSize);
-    disp.print(" ");
+    disp.print("] ");
     disp.print((int)setSigns2Win);
     disp.print(" to win");
 }
@@ -444,6 +440,8 @@ void drawBoard(short xo,short yo)
 {
     short xc;
     short yc;
+
+    drawGameInfo();
 
     //Vertical lines
     disp.color=1;
@@ -462,7 +460,7 @@ void drawBoard(short xo,short yo)
     {
         for (char y=0; y<setBoardSize; y++)
         {
-            //update symbol angle
+            //Update symbols time for animations
             if ( board[x][y].time<100) board[x][y].time+=5;
             board[x][y].angle=lerp((float)0,(float)2*PI,(float)board[x][y].time);
 
@@ -484,8 +482,18 @@ void drawBoard(short xo,short yo)
         }
     }
 
+
+    //Draw player symbol at top/right corner
+    Sign playerSign;
+    playerSign.symb=players[playerTurn].symb;
+    playerSign.x=disp.width-(SIGN_SIZE/2);
+    playerSign.y=SIGN_SIZE/2;
+    drawSign(playerSign);
+
     //draw winner list
-    for (int i=0; i<10; i++)
+    disp.drawRect(disp.width-SIGN_SIZE,0,SIGN_SIZE-1,SIGN_SIZE);
+    disp.drawRect(disp.width-SIGN_SIZE,0,SIGN_SIZE-1,disp.height-1);
+    for (int i=0; i<sizeof(scoreList)/sizeof(Sign); i++)
     {
         drawSign(scoreList[i]);
     }
@@ -758,8 +766,9 @@ void AI(Symbol symb)
     }
 
 
-    //Check if I can win in 2 moves ???
-
+    //TODO:
+    //Check if I can win in 2 moves
+    //as homework
 
     //place a random move
     while(true)
@@ -810,20 +819,14 @@ void updateGame()
         }
     }
 
-    //Draw player symbol at top/right corner
-    Sign playerSign;
-    playerSign.symb=players[playerTurn].symb;
-    playerSign.x=disp.width-(SIGN_SIZE/2);
-    playerSign.y=SIGN_SIZE/2;
-    drawSign(playerSign);
-
     //Draw
     drawBoard(boardPosition.x,boardPosition.y);
-    drawGameType();
+    drawGameInfo();
 }
 
 void updateCheck()
 {
+
     if(isWinner(board,players[playerTurn].symb))
     {
         cursor.x=-1;
@@ -840,20 +843,21 @@ void updateCheck()
     }
     else
     {
-        playerTurn++;
-        playerTurn=playerTurn%setNumPlayers;
+
         gameState=Move;
     }
 
+    //Next player
+    playerTurn++;
+    playerTurn=playerTurn%setNumPlayers;
+
     //Draw
     drawBoard(boardPosition.x,boardPosition.y);
-    drawGameType();
 }
 
 void updateWin()
 {
     drawBoard(boardPosition.x,boardPosition.y);
-    disp.println("There's a winner!");
 
     //Winner line
     if (winnerLine.time <100) winnerLine.time+=10;
@@ -862,7 +866,7 @@ void updateWin()
     if (btn.pressed(BTN_A) || game.getTime()>timer)
     {
         //move list symbols
-        for (int i=0; i<10; i++)
+        for (int i=0; i<sizeof(scoreList)/sizeof(Sign); i++)
         {
             scoreList[i].y+=SIGN_SIZE/2;
         }
@@ -870,20 +874,21 @@ void updateWin()
         //add winner symbol
         Sign winSign;
         winSign.x=disp.width-(SIGN_SIZE/2);
-        winSign.y=SIGN_SIZE*2;
+        winSign.y=SIGN_SIZE+SIGN_SIZE/2;
         winSign.symb=winnerLine.symb;
         winSign.diameter=SIGN_SIZE/2;
         scoreList[scoreListIndx]=winSign;
-        scoreListIndx=(scoreListIndx+1)%10;
+        scoreListIndx=(scoreListIndx+1)%(sizeof(scoreList)/sizeof(Sign));
 
         gameState=InitGame;
     }
+    disp.println(50,disp.height/2,"There's a winner!");
 }
 
 void updateDrawn()
 {
     drawBoard(boardPosition.x,boardPosition.y);
-    disp.print("It's a drawn");
+    disp.print(50,disp.height/2,"It's a drawn");
 
     if (btn.pressed(BTN_A) || game.getTime()>timer)
     {
