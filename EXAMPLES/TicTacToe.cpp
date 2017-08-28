@@ -344,18 +344,23 @@ void drawSign(Sign symb)
     }
 }
 
-void drawRectangle(short x1,short y1,short x2,short y2,double width,double oAngle)
+void drawRectangle(short x1,short y1,short x2,short y2,double width,double offsetAngle)
 {
     Point pp[4];
-    double angle=-atan2(y1-y2,x1-x2);
+    //Orignal angle
+    double angle=-atan2(y1-y2,x1-x2)+PI2;
+
     short xc=(x1+x2)/2;
     short yc=(y1+y2)/2;
-    double d=sqrt(((x1-x2)*(x1-x2))+((y1-y2)*(y1-y2)));
+    double d2=sqrt(((x1-x2)*(x1-x2))+((y1-y2)*(y1-y2)))/2;
 
-//    x1=xc+d*sin(angle);
-//    y1=yc+d*cos(angle);
-//    x2=xc+d*sin(PI-angle);
-//    y2=yc+d*cos(PI-angle);
+    x1=xc+d2*sin(angle+offsetAngle);
+    y1=yc+d2*cos(angle+offsetAngle);
+    x2=xc+d2*sin(angle+offsetAngle-PI);
+    y2=yc+d2*cos(angle+offsetAngle-PI);
+
+    //Recalculate angle after offset applied
+    angle=-atan2(y1-y2,x1-x2);
 
     pp[0].x=x1+width*sin(angle+PI4);
     pp[0].y=y1+width*cos(angle+PI4);
@@ -370,28 +375,24 @@ void drawRectangle(short x1,short y1,short x2,short y2,double width,double oAngl
     for(short i=0;i<4;i++)
     {
       disp.drawLine(pp[i].x,pp[i].y,pp[(i+1)%4].x,pp[(i+1)%4].y);
-      //disp.drawLine(xc,yc,pp[i].x,pp[i].y);
+      disp.drawLine(xc,yc,pp[i].x,pp[i].y);
     }
 
+    disp.drawLine(x1,y1,x2,y2);
 
 }
 
 void drawWinningLine(short xo,short yo,WinnerLine win)
 {
-    if(win.winner)
-    {
+    short x1=xo+win.from.x * CELL_SIZE + CELL_SIZE/2;
+    short y1=yo+win.from.y * CELL_SIZE+ CELL_SIZE/2;
+    short x2=xo+win.to.x * CELL_SIZE+ CELL_SIZE/2;
+    short y2=yo+win.to.y * CELL_SIZE+ CELL_SIZE/2;
+    double a=lerp(0.0,2.0*PI,(double)win.time);
 
-        short x1=xo+win.from.x * CELL_SIZE + CELL_SIZE/2;
-        short y1=yo+win.from.y * CELL_SIZE+ CELL_SIZE/2;
-        short x2=xo+win.to.x * CELL_SIZE+ CELL_SIZE/2;
-        short y2=yo+win.to.y * CELL_SIZE+ CELL_SIZE/2;
-        double a=lerp(0.0,2.0*PI,(double)win.time);
-
-        disp.color=3;
-        drawRectangle(x1,y1,x2,y2,SIGN_SIZE,a);
-    }
+    disp.color=3;
+    drawRectangle(x1,y1,x2,y2,SIGN_SIZE,a);
 }
-
 
 void drawMenu()
 {
@@ -423,6 +424,7 @@ void drawMenu()
     disp.print(30,disp.height-10,"A=Start Game B=Shuffle C=Menu");
 
 
+    drawRectangle(30,30,160,160,16,game.frameCount*PI/100.0);
 
 }
 
