@@ -821,7 +821,6 @@ void updateGame()
 
     //Draw
     drawBoard(boardPosition.x,boardPosition.y);
-    drawGameInfo();
 }
 
 void updateCheck()
@@ -882,13 +881,20 @@ void updateWin()
 
         gameState=InitGame;
     }
-    disp.println(50,disp.height/2,"There's a winner!");
+    disp.color=0;
+    disp.fillRectangle(55,disp.height/2-2,100,10);
+    disp.color=2;
+    disp.println(55,disp.height/2,"There's a winner!");
 }
 
 void updateDrawn()
 {
     drawBoard(boardPosition.x,boardPosition.y);
-    disp.print(50,disp.height/2,"It's a drawn");
+
+    disp.color=0;
+    disp.fillRectangle(55,disp.height/2-2,80,10);
+    disp.color=2;
+    disp.print(60,disp.height/2,"It's a drawn");
 
     if (btn.pressed(BTN_A) || game.getTime()>timer)
     {
