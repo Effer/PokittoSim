@@ -73,6 +73,10 @@ void toIso(Point * pp)
     int16_t y=pp->y;
     pp->x=x-y;
     pp->y=(x+y)/2;
+
+    //Center screen
+    pp->x+=(game.display.width/2-TILE_WIDTH);
+    pp->y+=(game.display.height/12);
 }
 
 void to2d(Point * pp)
@@ -85,14 +89,30 @@ void to2d(Point * pp)
 
 bool areNeighbor(Point p1,Point p2)
 {
+    short dx=p1.x-p2.x;
+    short dy=p1.y-p2.y;
+
+    bool tl=(dx==1) && (dy==1);
+    bool tc=(dx==0) && (dy==1);
+    bool tr=(dx==-1) && (dy==1);
+
+    bool cl=(dx==1) && (dy==0);
+    bool cr=(dx==-1) && (dy==0);
+
+    bool bl=(dx==1) && (dy==-1);
+    bool bc=(dx==0) && (dy==-1);
+    bool br=(dx==-1) && (dy==-1);
+
     //Only neighbor cells are allowed
-    return (abs(p1.x-p2.x)==1 || abs(p1.y-p2.y)==1);
+    return (tl || tc || tr || cl || cr || bl || bc || br);
 }
 
 void initBoard()
 {
     cursor.x=1;
     cursor.y=1;
+    selected.x=-1;
+    selected.y=-1;
 
     //Players tiles
     char x;
@@ -165,12 +185,14 @@ void moveCursor()
 void moveRules()
 {
     moveCursor();
+
+    //First select, then move if possible
     if (game.buttons.pressed(BTN_A))
     {
         //Check  if I'm selecting a piece I can move
         short piece=pieces[cursor.x][cursor.y];
         if((playerTurn==1 &&(piece==TILE_P1_LEVEL_1 || piece==TILE_P1_LEVEL_1 || piece==TILE_P1_LEVEL_1)) ||
-           (playerTurn==2 &&(piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1)))
+                (playerTurn==2 &&(piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1)))
         {
             selected.x=cursor.x;
             selected.y=cursor.y;
@@ -178,20 +200,29 @@ void moveRules()
         else
         {
             //Move piece
-           if(areNeighbor(selected,cursor) && //only near
-              pieces[cursor.x][cursor.y]==0) //and free
+            if(areNeighbor(selected,cursor) && //only near
+                    pieces[cursor.x][cursor.y]==0) //and free
             {
                 //copy piece
                 pieces[cursor.x][cursor.y]=pieces[selected.x][selected.y];
                 //delete old one
                 pieces[selected.x][selected.y]=0;
 
+                //Select new position
+                selected.x=cursor.x;
+                selected.y=cursor.y;
+
                 //Goto to build phase
                 gameState=Build;
             }
+            else
+            {
+                //Reset selection
+                selected.x=-1;
+                selected.y=-1;
+            }
 
-            selected.x=-1;
-            selected.y=-1;
+
         }
         refresh=true;
     }
@@ -200,17 +231,32 @@ void moveRules()
 
 void buildRules()
 {
-    if (game.buttons.pressed(BTN_B))
+    moveCursor();
+
+    //First select, then build if possible
+    if (game.buttons.pressed(BTN_A))
     {
-        board[cursor.x][cursor.y]-=1;
-        refresh=true;
+        short piece=pieces[cursor.x][cursor.y];
+        short tile=board[cursor.x][cursor.y];
+        bool validBuildTile=(tile==TILE_TERRAIN || tile==TILE_LEVEL_1 || tile==TILE_LEVEL_2 || tile==TILE_LEVEL_3);
+
+
+        if(areNeighbor(selected,cursor) && //only near
+                pieces[cursor.x][cursor.y]==0 && //and free
+                validBuildTile ) //and valid build tile
+        {
+            board[cursor.x][cursor.y]+=1;
+
+            playerTurn=playerTurn==1?2:1;
+            gameState=Move;
+
+            //deselect
+            selected.x=-1;
+            selected.y=-1;
+        }
+          refresh=true;
     }
 
-    if (game.buttons.pressed(BTN_C))
-    {
-        board[cursor.x][cursor.y]+=1;
-        refresh=true;
-    }
 }
 
 void drawBoard()
@@ -229,12 +275,10 @@ void drawBoard()
             boardTile=board[x][y];
             pieceTile=pieces[x][y];
 
+            //Calc drawing coordinates
             p.x=x*TILE_WIDTH;
             p.y=y*TILE_HEIGHT;
             toIso(&p);
-            //Center screen
-            p.x+=(game.display.width/2-TILE_WIDTH);
-            p.y+=(game.display.height/12);
 
             //Draw Tile
             game.display.directBitmap(p.x,p.y,sprites[boardTile],4,1);
@@ -251,12 +295,20 @@ void drawBoard()
             //Draw Cursor
             if (x==cursor.x && y==cursor.y)
             {
-                bool sel=selected.x>=0 && selected.y>=0;
-
                 if (playerTurn==1)
                     game.display.directBitmap(p.x,p.y,sprites[TILE_CURSOR_P1],4,1);
                 else
                     game.display.directBitmap(p.x,p.y,sprites[TILE_CURSOR_P2],4,1);
+            }
+
+            //Draw selection
+            if (x==selected.x && y==selected.y)
+            {
+                if (playerTurn==1)
+                    game.display.directBitmap(p.x,p.y,sprites[TILE_CURSOR_P1_SEL],4,1);
+                else
+                    game.display.directBitmap(p.x,p.y,sprites[TILE_CURSOR_P2_SEL],4,1);
+
             }
         }
     }
@@ -280,7 +332,7 @@ void drawIntro()
     if (anyKey())
         gameState=Move;
 
-    game.display.print("Press any key..");
+    game.display.print(game.display.width/2,game.display.height/2, "Press any key..");
 }
 
 void drawGame()
@@ -301,7 +353,7 @@ int main ()
 
     //load sprite palette
     game.display.load565Palette(sprite_pal);
-    //game.display.enableDirectPrinting(1);
+    game.display.enableDirectPrinting(1);
 
     initBoard();
 
@@ -309,24 +361,32 @@ int main ()
     {
         if (game.update(true))
         {
-            game.display.directChar(0,0,'X');
+
 
             switch(gameState)
             {
-                case Intro:
-                    drawIntro();
-                    break;
-                case Move:
-                case MoveCheck:
-                case Build:
-                case BuildCheck:
-                    moveRules();
-                    buildRules();
-                    drawGame();
-                    break;
-                case Credits:
-                    break;
+            case Intro:
+                drawIntro();
+                break;
+            case Move:
+                moveRules();
+                drawGame();
+                break;
+            case MoveCheck:
+                break;
+            case Build:
+                buildRules();
+                drawGame();
+                break;
+            case BuildCheck:
+                break;
+            case Credits:
+                break;
             }
+
+
+
+            game.display.print(0,0,gameState);
 
         }
     }
