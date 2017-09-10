@@ -1,3 +1,5 @@
+#define DEBUG
+
 #include "Pokitto.h"
 #include "Santorini.h"
 
@@ -16,22 +18,27 @@ Pokitto::Core game;
 #define TILE_P1_LEVEL_1 6
 #define TILE_P1_LEVEL_2 7
 #define TILE_P1_LEVEL_3 8
+#define TILE_P1_LEVEL_4 9
 
-#define TILE_P2_LEVEL_1 9
-#define TILE_P2_LEVEL_2 10
-#define TILE_P2_LEVEL_3 11
+#define TILE_P2_LEVEL_1 10
+#define TILE_P2_LEVEL_2 11
+#define TILE_P2_LEVEL_3 12
+#define TILE_P2_LEVEL_4 13
 
-#define TILE_CURSOR_P1 12
-#define TILE_CURSOR_P2 13
+#define TILE_CURSOR_P1 14
+#define TILE_CURSOR_P2 15
 
-#define TILE_CURSOR_P1_SEL  14
-#define TILE_CURSOR_P2_SEL  15
+#define TILE_CURSOR_P1_SEL  16
+#define TILE_CURSOR_P2_SEL  17
 
 #define BOARDSIZE 7
 
+
+bool useAI=true;
+uint16_t intro[BOARDSIZE][BOARDSIZE];
 uint16_t board[BOARDSIZE][BOARDSIZE];
 uint16_t pieces[BOARDSIZE][BOARDSIZE];
-bool refresh=true;
+bool _refresh=true;
 
 typedef struct
 {
@@ -48,13 +55,26 @@ typedef enum  GameStates
 {
     Intro,
     InitGame,
+    Place,
     Move,
-    MoveCheck,
     Build,
-    BuildCheck,
+    End,
     Credits
 } GameStates;
 GameStates gameState;
+
+const char * stateDescription[] =
+{
+    "Intro",
+    "Initialize",
+    "Place",
+    "Move",
+    "Build",
+    "End",
+};
+
+
+
 
 
 bool anyKey()
@@ -87,7 +107,14 @@ void to2d(Point * pp)
     pp->y=(2*y-x)/2;
 }
 
-bool areNeighbor(Point p1,Point p2)
+short distance(short x1,short y1,short x2, short y2)
+{
+    short dx=x1-x2;
+    short dy=y1-y2;
+    return (short)((dx*dx)+(dy*dy));
+}
+
+bool isNear(Point p1,Point p2)
 {
     short dx=p1.x-p2.x;
     short dy=p1.y-p2.y;
@@ -107,12 +134,218 @@ bool areNeighbor(Point p1,Point p2)
     return (tl || tc || tr || cl || cr || bl || bc || br);
 }
 
+short getBoardHeight(short x,short y)
+{
+    short tile=board[x][y];
+    if(tile==TILE_LEVEL_1) return 1;
+    if(tile==TILE_LEVEL_2) return 2;
+    if(tile==TILE_LEVEL_3) return 3;
+    if(tile==TILE_LEVEL_4) return 4;
+    return 0;
+}
+
+void resetSelection()
+{
+    selected.x=-1;
+    selected.y=-1;
+}
+
+bool isSelected()
+{
+    return (selected.x!=-1) && (selected.y!=-1);
+}
+
+bool isSelecteable(short playerTurn,short x,short y)
+{
+    bool selecteableP1;
+    bool selecteableP2;
+    short piece=pieces[x][y];
+
+    selecteableP1 = ((playerTurn==1) &&
+                     (piece==TILE_P1_LEVEL_1 ||
+                      piece==TILE_P1_LEVEL_2 ||
+                      piece==TILE_P1_LEVEL_3||
+                      piece==TILE_P1_LEVEL_4));
+
+    selecteableP2 = ((playerTurn==2) &&
+                     (piece==TILE_P2_LEVEL_1 ||
+                      piece==TILE_P2_LEVEL_2 ||
+                      piece==TILE_P2_LEVEL_3||
+                      piece==TILE_P2_LEVEL_4));
+
+    return selecteableP1 || selecteableP2;
+}
+
+bool moveAllowed(short playerTurn,Point from,Point to)
+{
+    short fromLevel=getBoardHeight(from.x,from.y);
+    short toLevel=getBoardHeight(to.x,to.y);
+
+    short dZ=toLevel-fromLevel;
+    //Move piece
+    if(isNear(from,to) && //near
+            pieces[to.x][to.y]==0 && //free
+            dZ<2 && //max 1 level up
+            toLevel!=TILE_LEVEL_4 && //not blocked
+            to.x>0 && to.x<6 && to.y>0 && to.y<6) //inside board
+    {
+        return true;
+    }
+    return false;
+}
+
+bool anyMoveAllowed(short playerTurn)
+{
+    Point from;
+    Point to;
+    for(short x=0; x<BOARDSIZE; x++)
+    {
+        for(short y=0; y<BOARDSIZE; y++)
+        {
+            //Search player
+            if (isSelecteable(playerTurn,x,y))
+            {
+                from.x=x;
+                from.y=y;
+                //Check if can do any move around
+                for(short xt=-1; xt<2; xt++)
+                {
+                    for(short yt=-1; yt<2; yt++)
+                    {
+                        to.x=x+xt;
+                        to.y=y+yt;
+                        if(moveAllowed(playerTurn,from,to))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+
+            }
+        }
+    }
+    return false;
+}
+
+Point getNearestPiece(short playerTurn,Point from)
+{
+    //Search around for
+    //find all and take nearest
+    short bestDistance=9999;
+    short d=0;
+    Point nearest;
+    nearest.x=from.x;
+    nearest.y=from.y;
+
+    for(short x=0; x<BOARDSIZE; x++)
+    {
+        for(short y=0; y<BOARDSIZE; y++)
+        {
+            if((x!=from.x || y!=from.y) && isSelecteable(playerTurn,x,y))
+            {
+                d=distance(x,y,from.x,from.y);
+                if(d<bestDistance)
+                {
+                    bestDistance=d;
+                    nearest.x=x;
+                    nearest.y=y;
+                }
+            }
+        }
+    }
+    return nearest;
+}
+
+short countPlayerPieces()
+{
+    //Count players pieces
+    short c=0;
+    for(short x=0; x<BOARDSIZE; x++)
+    {
+        for(short y=0; y<BOARDSIZE; y++)
+        {
+            if (pieces[x][y]==TILE_P1_LEVEL_1 || pieces[x][y]==TILE_P2_LEVEL_1 ||
+                    pieces[x][y]==TILE_P1_LEVEL_2 || pieces[x][y]==TILE_P2_LEVEL_2 ||
+                    pieces[x][y]==TILE_P1_LEVEL_3 || pieces[x][y]==TILE_P2_LEVEL_3 ||
+                    pieces[x][y]==TILE_P1_LEVEL_4 || pieces[x][y]==TILE_P2_LEVEL_4)
+            {
+                c++;
+            }
+        }
+    }
+
+    return c;
+}
+
+void nextTurn()
+{
+    playerTurn=playerTurn==1?2:1;
+}
+
+void refresh()
+{
+    _refresh=true;
+}
+
+void AI()
+{
+    short x;
+    short y;
+
+    if(gameState==Place)
+    {
+        //Place near other players
+        if(countPlayerPieces()>0)
+        {
+
+
+        }
+        else
+        {
+            //Place random
+            while(true)
+            {
+                x=random(1,5);
+                y=random(1,5);
+                if (pieces[x][y]==0)
+                {
+                    pieces[x][y] = playerTurn==1?TILE_P1_LEVEL_1:TILE_P2_LEVEL_1;
+                    refresh();
+                    return;
+                }
+            }
+        }
+
+    }
+
+
+    if(gameState==Move)
+    {
+        //Try to win moving at level 4
+
+        //if opponent can go to level 4 -> move near to later block it
+
+        //Move near higher build
+    }
+
+    if(gameState==Build)
+    {
+        //if opponent can go to level 4 -> Build a Dome
+
+        //Build to reach higher build
+
+    }
+
+
+
+}
+
 void initBoard()
 {
     cursor.x=1;
     cursor.y=1;
-    selected.x=-1;
-    selected.y=-1;
+    resetSelection();
 
     //Players tiles
     char x;
@@ -128,80 +361,177 @@ void initBoard()
             pieces[x][y]=0;
         }
     }
-    //Place random
-    for (char i=0; i<4; i++)
-    {
-        while(true)
-        {
-            x=random(1,BOARDSIZE-2);
-            y=random(1,BOARDSIZE-2);
 
-            if(pieces[x][y]==0)
-            {
-                pieces[x][y]=players[i];
-                break;
-            }
-        }
-    }
+//    //Place random
+//    for (char i=0; i<4; i++)
+//    {
+//        while(true)
+//        {
+//            x=random(1,BOARDSIZE-2);
+//            y=random(1,BOARDSIZE-2);
+//
+//            if(pieces[x][y]==0)
+//            {
+//                pieces[x][y]=players[i];
+//                break;
+//            }
+//        }
+//    }
 
-    //
+    //Init land
     for(uint8_t x=0; x<BOARDSIZE; x++)
     {
         for(uint8_t y=0; y<BOARDSIZE; y++)
         {
+            //Land
             board[x][y]=TILE_TERRAIN;
-            if (x==0 || y==0 || x==BOARDSIZE-1 || y==BOARDSIZE-1) board[x][y]=TILE_SEA;
+            //Sea at boarder
+            if (x==0 || y==0 || x==BOARDSIZE-1 || y==BOARDSIZE-1)
+                board[x][y]=TILE_SEA;
         }
+    }
+
+    //Select player
+    cursor=getNearestPiece(playerTurn,cursor);
+}
+
+void moveCursorSnap()
+{
+    if (game.buttons.pressed(BTN_UP) ||
+            game.buttons.pressed(BTN_DOWN) ||
+            game.buttons.pressed(BTN_LEFT) ||
+            game.buttons.pressed(BTN_RIGHT))
+    {
+        cursor=getNearestPiece(playerTurn,cursor);
+        refresh();
     }
 }
 
-void moveCursor()
+void moveCursor(bool onlyNearSelected)
 {
+
+    Point newCursor;
+    newCursor.x=cursor.x;
+    newCursor.y=cursor.y;
+
     if (game.buttons.pressed(BTN_UP))
     {
-        cursor.x-=1;
-        refresh=true;
+        newCursor.x-=1;
+        refresh();
     }
 
     if (game.buttons.pressed(BTN_DOWN))
     {
-        cursor.x+=1;
-        refresh=true;
+        newCursor.x+=1;
+        refresh();
     }
 
     if (game.buttons.pressed(BTN_LEFT))
     {
-        cursor.y+=1;
-        refresh=true;
+        newCursor.y+=1;
+        refresh();
     }
 
     if (game.buttons.pressed(BTN_RIGHT))
     {
-        cursor.y-=1;
-        refresh=true;
+        newCursor.y-=1;
+        refresh();
+    }
+
+    //Limit cursor inside board
+    if (newCursor.x<1)newCursor.x=1;
+    if (newCursor.x>5)newCursor.x=5;
+    if (newCursor.y<1)newCursor.y=1;
+    if (newCursor.y>5)newCursor.y=5;
+
+    //Allow move only near the selection
+    if(onlyNearSelected)
+    {
+        if(!isNear(selected,newCursor))
+        {
+            //Restore old position
+            newCursor.x=cursor.x;
+            newCursor.y=cursor.y;
+        }
+    }
+
+    if(refresh)
+    {
+        cursor.x=newCursor.x;
+        cursor.y=newCursor.y;
+    }
+
+#ifdef DEBUG
+    if (game.buttons.pressed(BTN_C))
+    {
+        board[cursor.x][cursor.y]+=1;
+        refresh();
+    }
+#endif // DEBUG
+}
+
+void placeRules()
+{
+    if(useAI && playerTurn==2)
+    {
+        AI();
+        nextTurn();
+    }
+
+
+    moveCursor(false);
+
+    if (game.buttons.pressed(BTN_A))
+    {
+        short players = playerTurn==1?TILE_P1_LEVEL_1:TILE_P2_LEVEL_1;
+
+        pieces[cursor.x][cursor.y]=players;
+
+        nextTurn();
+        refresh();
+    }
+
+    //all pieces dropped
+    if (countPlayerPieces()>=4)
+    {
+        cursor=getNearestPiece(playerTurn,cursor);
+        gameState=Move;
     }
 }
 
+
 void moveRules()
 {
-    moveCursor();
+
+    //free move if selected, otherwise snap to players
+    if(isSelected())
+    {
+        moveCursor(true);
+    }
+    else
+    {
+        moveCursorSnap();
+    }
+
+
+    //Check if player can't move
+    if(!anyMoveAllowed(playerTurn))
+    {
+        gameState=End;
+    }
 
     //First select, then move if possible
     if (game.buttons.pressed(BTN_A))
     {
         //Check  if I'm selecting a piece I can move
-        short piece=pieces[cursor.x][cursor.y];
-        if((playerTurn==1 &&(piece==TILE_P1_LEVEL_1 || piece==TILE_P1_LEVEL_1 || piece==TILE_P1_LEVEL_1)) ||
-                (playerTurn==2 &&(piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1 || piece==TILE_P2_LEVEL_1)))
+        if(isSelecteable(playerTurn,cursor.x,cursor.y))
         {
             selected.x=cursor.x;
             selected.y=cursor.y;
         }
         else
         {
-            //Move piece
-            if(areNeighbor(selected,cursor) && //only near
-                    pieces[cursor.x][cursor.y]==0) //and free
+            if(moveAllowed(playerTurn,selected,cursor))
             {
                 //copy piece
                 pieces[cursor.x][cursor.y]=pieces[selected.x][selected.y];
@@ -212,26 +542,38 @@ void moveRules()
                 selected.x=cursor.x;
                 selected.y=cursor.y;
 
-                //Goto to build phase
-                gameState=Build;
+                //Check win
+                if (board[selected.x][selected.y]==TILE_LEVEL_3)
+                {
+                    gameState=End;
+                }
+                else
+                {
+                    gameState=Build;
+                }
             }
             else
             {
                 //Reset selection
-                selected.x=-1;
-                selected.y=-1;
+                resetSelection();
             }
-
-
         }
-        refresh=true;
+        refresh();
+    }
+
+    //Reset selection
+    if (game.buttons.pressed(BTN_B))
+    {
+        resetSelection();
+        refresh();
     }
 
 }
 
+
 void buildRules()
 {
-    moveCursor();
+    moveCursor(true);
 
     //First select, then build if possible
     if (game.buttons.pressed(BTN_A))
@@ -240,42 +582,46 @@ void buildRules()
         short tile=board[cursor.x][cursor.y];
         bool validBuildTile=(tile==TILE_TERRAIN || tile==TILE_LEVEL_1 || tile==TILE_LEVEL_2 || tile==TILE_LEVEL_3);
 
-
-        if(areNeighbor(selected,cursor) && //only near
+        if(isNear(selected,cursor) && //only near
                 pieces[cursor.x][cursor.y]==0 && //and free
                 validBuildTile ) //and valid build tile
         {
+            //Build up
             board[cursor.x][cursor.y]+=1;
 
-            playerTurn=playerTurn==1?2:1;
+            //Next turn
+            nextTurn();
             gameState=Move;
 
-            //deselect
-            selected.x=-1;
-            selected.y=-1;
-        }
-          refresh=true;
-    }
+            //select none
+            resetSelection();
 
+            //Move cursor to nearest
+            cursor=getNearestPiece(playerTurn,cursor);
+        }
+        refresh();
+    }
 }
+
+
 
 void drawBoard()
 {
     Point p;
-    uint8_t boardTile=0;
-    uint8_t pieceTile=0;
-    int16_t zOff=0;
+    short boardTile=0;
+    short pieceTile=0;
+    short zOff=0;
 
     game.display.invisiblecolor=0;
 
-    for(uint8_t x=0; x<BOARDSIZE; x++)
+    for(short x=0; x<BOARDSIZE; x++)
     {
-        for(uint8_t y=0; y<BOARDSIZE; y++)
+        for(short y=0; y<BOARDSIZE; y++)
         {
             boardTile=board[x][y];
             pieceTile=pieces[x][y];
 
-            //Calc drawing coordinates
+            //Calculate drawing coordinates
             p.x=x*TILE_WIDTH;
             p.y=y*TILE_HEIGHT;
             toIso(&p);
@@ -283,12 +629,10 @@ void drawBoard()
             //Draw Tile
             game.display.directBitmap(p.x,p.y,sprites[boardTile],4,1);
 
-            //Draw pieces
+            //Draw players pieces at correct height
             if (pieceTile!=0)
             {
-                zOff=0;
-                if(boardTile==TILE_LEVEL_2) zOff=1;
-                if(boardTile==TILE_LEVEL_3) zOff=2;
+                zOff=getBoardHeight(x,y);
                 game.display.directBitmap(p.x,p.y,sprites[pieceTile+zOff],4,1);
             }
 
@@ -324,28 +668,49 @@ void drawIntro()
     int w=random(0,game.display.width);
     int h=random(0,game.display.height);
     int c=random(65535);
-    game.display.directRectangle(x,y,w,h,c);
+    //game.display.directRectangle(x,y,w,h,c);
+
+    game.display.directRectangle(0,0,game.display.width,game.display.height,0);
 
     game.display.invisiblecolor=0;
-    game.display.directBitmap(60,60,sprites[TILE_LEVEL_3],4,1);
+    for(short x=0; x<BOARDSIZE; x++)
+    {
+        for(short y=0; y<BOARDSIZE; y++)
+        {
+            Point p;
+            p.x=x*TILE_WIDTH;
+            p.y=y*TILE_HEIGHT;
+            toIso(&p);
+
+            short s=intro[x][y];
+            game.display.directBitmap(p.x,p.y,sprites[s],4,1);
+        }
+    }
+
+    x=random(0,6);
+    y=random(0,6);
+    intro[x][y]=(intro[x][y]+1)%6;
+
+    game.display.print(game.display.width/2,game.display.height-16, "Press any key..");
+    game.display.invisiblecolor=-1;
 
     if (anyKey())
-        gameState=Move;
-
-    game.display.print(game.display.width/2,game.display.height/2, "Press any key..");
+        gameState=Place;
 }
 
 void drawGame()
 {
-    if(refresh)
+    if(_refresh)
     {
-        refresh=false;
+        _refresh=false;
         //Clear screen
         game.display.directRectangle(0,0,game.display.width,game.display.height,0);
         //Draw
         drawBoard();
     }
 }
+
+
 
 int main ()
 {
@@ -361,32 +726,35 @@ int main ()
     {
         if (game.update(true))
         {
-
-
             switch(gameState)
             {
             case Intro:
                 drawIntro();
                 break;
+            case Place:
+                placeRules();
+                drawGame();
+                break;
             case Move:
                 moveRules();
                 drawGame();
-                break;
-            case MoveCheck:
                 break;
             case Build:
                 buildRules();
                 drawGame();
                 break;
-            case BuildCheck:
+
+            case End:
+                drawGame();
                 break;
             case Credits:
                 break;
             }
 
 
-
-            game.display.print(0,0,gameState);
+            game.display.print(0,0,stateDescription[gameState]);
+            if(!isSelected())
+                game.display.print(0,10,"select piece");
 
         }
     }
