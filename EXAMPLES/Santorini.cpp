@@ -33,7 +33,6 @@ Pokitto::Core game;
 
 #define BOARDSIZE 7
 
-
 bool useAI=true;
 uint16_t intro[BOARDSIZE][BOARDSIZE];
 uint16_t board[BOARDSIZE][BOARDSIZE];
@@ -152,14 +151,22 @@ bool isNear(Point p1,Point p2)
     return (tl || tc || tr || cl || cr || bl || bc || br);
 }
 
-short getBoardHeight(short x,short y)
+short getBuildHeight(short x,short y)
 {
     short tile=board[x][y];
-    if(tile==TILE_LEVEL_1) return 1;
-    if(tile==TILE_LEVEL_2) return 2;
-    if(tile==TILE_LEVEL_3) return 3;
-    if(tile==TILE_LEVEL_4) return 4;
-    return 0;
+    switch (tile)
+    {
+    case TILE_LEVEL_1:
+        return 1;
+    case TILE_LEVEL_2:
+        return 2;
+    case TILE_LEVEL_3:
+        return 3;
+    case TILE_LEVEL_4:
+        return 4;
+    default:
+        return 0;
+    }
 }
 
 void resetSelection()
@@ -175,20 +182,14 @@ bool isSelected()
 
 bool isSelecteable(short playerTurn,short x,short y)
 {
-    bool selecteableP1;
-    bool selecteableP2;
     short piece=pieces[x][y];
-
-    selecteableP1 = (playerTurn==0 || playerTurn==1) && (piece==1);
-    selecteableP2 = (playerTurn==0 || playerTurn==2) && (piece==2);
-
-    return selecteableP1 || selecteableP2;
+    return (playerTurn==piece) || (playerTurn==0 && piece!=0);
 }
 
-bool moveAllowed(short playerTurn,Point from,Point to)
+bool isMoveAllowed(Point from,Point to)
 {
-    short fromLevel=getBoardHeight(from.x,from.y);
-    short toLevel=getBoardHeight(to.x,to.y);
+    short fromLevel=getBuildHeight(from.x,from.y);
+    short toLevel=getBuildHeight(to.x,to.y);
 
     short dZ=toLevel-fromLevel;
     //Move piece
@@ -201,6 +202,21 @@ bool moveAllowed(short playerTurn,Point from,Point to)
         return true;
     }
     return false;
+}
+
+
+bool isBuildAllowed(Point where)
+{
+    bool insideBoard=where.x>0 && where.x<6 && where.y>0 && where.y<6;
+
+    bool boardOK=board[where.x][where.y]==TILE_TERRAIN ||
+                 board[where.x][where.y]==TILE_LEVEL_1 ||
+                 board[where.x][where.y]==TILE_LEVEL_2 ||
+                 board[where.x][where.y]==TILE_LEVEL_3;
+
+    bool pieceOK=pieces[where.x][where.y]==0;
+
+    return insideBoard && boardOK && pieceOK;
 }
 
 bool anyMoveAllowed(short playerTurn)
@@ -223,7 +239,7 @@ bool anyMoveAllowed(short playerTurn)
                     {
                         to.x=x+xt;
                         to.y=y+yt;
-                        if(moveAllowed(playerTurn,from,to))
+                        if(isMoveAllowed(from,to))
                         {
                             return true;
                         }
@@ -235,33 +251,67 @@ bool anyMoveAllowed(short playerTurn)
     return false;
 }
 
-bool findWinMove(Movement winMove)
+bool anyCanMoveThere(short playerTurn,Point there,Point * who)
 {
-    short fromLevel;
-    short toLevel;
+    Point from;
+    Point to;
     for(short x=0; x<BOARDSIZE; x++)
     {
         for(short y=0; y<BOARDSIZE; y++)
         {
-            winMove.from.x=x;
-            winMove.from.y=y;
-            fromLevel=board[x][y];
+            //Search players pieces
+            if (isSelecteable(playerTurn,x,y))
+            {
+                from.x=x;
+                from.y=y;
+                //Check if can do any move around
+                for(short xt=-1; xt<2; xt++)
+                {
+                    for(short yt=-1; yt<2; yt++)
+                    {
+                        to.x=there.x+xt;
+                        to.y=there.y+yt;
+                        if(isMoveAllowed(from,to))
+                        {
+                            who->x=from.x;
+                            who->y=from.y;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool findMovement(short fromLevel,short toLevel,Movement * movement)
+{
+    short bLevelFrom;
+    short bLevelTo;
+    for(short x=1; x<BOARDSIZE-1; x++)
+    {
+        for(short y=1; y<BOARDSIZE-1; y++)
+        {
+            movement->from.x=x;
+            movement->from.y=y;
+            bLevelFrom=board[x][y];
 
             //Search players pieces
             if (isSelecteable(0,x,y))
             {
                 //look surround pieces
-                for(short xi=0; xi<BOARDSIZE; xi++)
+                for(short xi=1; xi<BOARDSIZE-1; xi++)
                 {
-                    for(short yi=0; yi<BOARDSIZE; yi++)
+                    for(short yi=1; yi<BOARDSIZE-1; yi++)
                     {
-                        winMove.to.x=xi;
-                        winMove.to.y=yi;
-                        toLevel=board[xi][yi];
+                        movement->to.x=xi;
+                        movement->to.y=yi;
+                        bLevelTo=board[xi][yi];
 
-                        if(isNear(winMove.from,winMove.to))
+                        if(isNear(movement->from,movement->to))
                         {
-                            if ((toLevel==4 && fromLevel==3))
+                            if ((bLevelFrom==fromLevel && bLevelTo==toLevel))
                             {
                                 return true;
                             }
@@ -277,7 +327,7 @@ bool findWinMove(Movement winMove)
 Point getNearestPiece(short playerTurn,Point from)
 {
     //Search around for
-    //find all and take nearest
+    //find all and take nearest != actual position
     short bestDistance=9999;
     short d=0;
     Point nearest;
@@ -303,6 +353,69 @@ Point getNearestPiece(short playerTurn,Point from)
     return nearest;
 }
 
+Point searchReacheableNear(short playerTurn,Point from,Point to)
+{
+    //Search all points around destination if any is allowed, return it
+    Point mto;
+    mto.x=-1;
+    mto.y=-1;
+    for(short xt=-1; xt<2; xt++)
+    {
+        for(short yt=-1; yt<2; yt++)
+        {
+            mto.x=to.x+xt;
+            mto.y=to.y+yt;
+            if(isMoveAllowed(from,mto))
+            {
+                mto.x=mto.x;
+                mto.y=mto.y;
+                return mto;
+            }
+        }
+    }
+    return mto;
+}
+
+
+
+Point findHighestBuild()
+{
+    Point highestPoint;
+    short maxHeight=-1;
+    short heigth=0;
+
+    for(short x=0; x<BOARDSIZE; x++)
+    {
+        for(short y=0; y<BOARDSIZE; y++)
+        {
+            heigth=getBuildHeight(x,y);
+            if(heigth>maxHeight)
+            {
+                maxHeight=heigth;
+                highestPoint.x=x;
+                highestPoint.y=y;
+            }
+        }
+    }
+    return highestPoint;
+}
+
+Point moveTowards(Point from,Point to)
+{
+    //get direction
+    short dx=to.x-from.x;
+    short dy=to.y-from.y;
+
+    dx=clip<short>(dx,-1,1);
+    dy=clip<short>(dy,-1,1);
+    //
+
+    Point towards;
+    towards.x=clip(from.x+dx,1,5);
+    towards.y=clip(from.y+dy,1,5);
+    return towards;
+}
+
 short countPlayerPieces()
 {
     //Count players pieces
@@ -321,6 +434,14 @@ short countPlayerPieces()
     return c;
 }
 
+void movePiece(Point from,Point to)
+{
+    pieces[from.x][from.y]=0;
+    pieces[to.x][to.y]=playerTurn;
+    selected.x=to.x;
+    selected.y=to.y;
+}
+
 short nextTurn()
 {
     playerTurn=playerTurn==1?2:1;
@@ -335,7 +456,23 @@ void AI()
 {
     short x;
     short y;
+    Point towards;
+    Point who;
 
+    //Prepare some useful data
+    //Look if a piece can move at top
+    Movement winMove;
+    bool win=findMovement(TILE_LEVEL_2,TILE_LEVEL_3,&winMove);
+    short winPiece=-1;
+    if(win)
+    {
+        winPiece=pieces[winMove.from.x][winMove.from.y];
+    }
+
+    Point highestBuild=findHighestBuild();
+
+
+    //-----------------------------------------------------
     if(gameState==Place)
     {
         //Place near other players
@@ -350,7 +487,6 @@ void AI()
                 if (pieces[x][y]==0)
                 {
                     pieces[x][y] = playerTurn;
-                    refresh();
                     return;
                 }
             }
@@ -365,58 +501,115 @@ void AI()
                 if (pieces[x][y]==0)
                 {
                     pieces[x][y] = playerTurn;
-                    refresh();
+                    return;
+                }
+            }
+        }
+    }
+
+    //-----------------------------------------------------
+    if(gameState==Move)
+    {
+        //Try to win moving at level 3
+
+        //AI can move to win?
+        if(win && winPiece==playerTurn)
+        {
+            movePiece(winMove.from,winMove.to);
+            return;
+        }
+
+        //Find if I can reach any tiles around win position (to later build there)
+        if(win && winPiece!=playerTurn)
+        {
+            Point nearWin;
+            for(short xt=-1; xt<2; xt++)
+            {
+                for(short yt=-1; yt<2; yt++)
+                {
+                    nearWin.x=winMove.to.x+xt;
+                    nearWin.y=winMove.to.y+yt;
+                    if(anyCanMoveThere(playerTurn,nearWin,&who))
+                    {
+                        movePiece(who,nearWin);
+                        return;
+                    }
+                }
+            }
+        }
+
+
+        //Move near highest build
+        Point nearestPiece=getNearestPiece(playerTurn,highestBuild);
+        towards= moveTowards(nearestPiece,highestBuild);
+        Point nearHighest;
+        for(short xt=-1; xt<2; xt++)
+        {
+            for(short yt=-1; yt<2; yt++)
+            {
+                nearHighest.x=winMove.to.x+xt;
+                nearHighest.y=winMove.to.y+yt;
+                if(anyCanMoveThere(playerTurn,nearHighest,&who))
+                {
+                    movePiece(who,nearHighest);
                     return;
                 }
             }
         }
 
+
+        //Try a valid random move
+        while(true)
+        {
+            nearestPiece=getNearestPiece(playerTurn,nearestPiece);
+            Point randMove;
+            randMove.x=nearestPiece.x+random(-1,1);
+            randMove.y=nearestPiece.y+random(-1,1);
+            if(isMoveAllowed(nearestPiece,randMove))
+            {
+                movePiece(nearestPiece,randMove);
+                return;
+            }
+        }
     }
 
-
-    if(gameState==Move)
-    {
-        //Try to win moving at level 4
-        //Look if a piece can move at top
-        Movement winMove;
-        bool win=findWinMove(winMove);
-        short winPiece=-1;
-        if(win)
-        {
-            winPiece=pieces[winMove.from.x][winMove.from.y];
-
-        }
-
-        //AI can move to win?
-        if(win && winPiece==playerTurn)
-        {
-            pieces[winMove.from.x][winMove.from.y]=0;
-            pieces[winMove.to.x][winMove.to.y]=playerTurn;
-            refresh();
-            return;
-        }
-
-        //if opponent can go to level 4 -> move near to later block it
-        if(win && winPiece!=playerTurn)
-        {
-
-            refresh();
-            return;
-        }
-
-        //Move near higher build
-    }
-
+    //-----------------------------------------------------
     if(gameState==Build)
     {
-        //if opponent can go to level 4 -> Build a Dome
+        //if opponent can go to level 3 -> Build a Dome
+
+        //if opponent can go to level 3 try to block it building a dome
+        if(win && winPiece!=playerTurn)
+        {
+            if(isNear(selected,winMove.to))
+            {
+                board[winMove.to.x][winMove.to.y]+=1;
+                refresh();
+                return;
+            }
+        }
 
         //Build to reach higher build
 
+        //avoid to build a win position for the opponent
+        //---->>>>>>
+
+
+        //Build random around this piece
+        while(true)
+        {
+            Point randBuild;
+            randBuild.x=selected.x+random(-1,1);
+            randBuild.y=selected.y+random(-1,1);
+            if(isBuildAllowed(randBuild))
+            {
+                board[randBuild.x][randBuild.y]+=1;
+                refresh();
+                return;
+            }
+        }
+
     }
-
-
-
 }
 
 void initBoard()
@@ -554,6 +747,7 @@ void placeRules()
     {
         AI();
         nextTurn();
+        refresh();
     }
     else
     {
@@ -581,7 +775,9 @@ void moveRules()
     if(useAI && playerTurn==2)
     {
         AI();
-        nextTurn();
+        gameState=Build;
+        refresh();
+        simulator.waitSDL(1000);
     }
     else
     {
@@ -607,17 +803,9 @@ void moveRules()
             }
             else
             {
-                if(moveAllowed(playerTurn,selected,cursor))
+                if(isMoveAllowed(selected,cursor))
                 {
-                    //copy piece
-                    pieces[cursor.x][cursor.y]=pieces[selected.x][selected.y];
-                    //delete old one
-                    pieces[selected.x][selected.y]=0;
-
-                    //Select new position
-                    selected.x=cursor.x;
-                    selected.y=cursor.y;
-
+                    movePiece(selected,cursor);
                     //Next game state
                     gameState=Build;
                 }
@@ -648,33 +836,43 @@ void moveRules()
 
 void buildRules()
 {
-    moveCursor(true);
-
-    //First select, then build if possible
-    if (game.buttons.pressed(BTN_A))
+    if(useAI && playerTurn==2)
     {
-        short piece=pieces[cursor.x][cursor.y];
-        short tile=board[cursor.x][cursor.y];
-        bool validBuildTile=(tile==TILE_TERRAIN || tile==TILE_LEVEL_1 || tile==TILE_LEVEL_2 || tile==TILE_LEVEL_3);
+        AI();
+        nextTurn();
+        gameState=Move;
+        resetSelection();
 
-        if(isNear(selected,cursor) && //only near
-                pieces[cursor.x][cursor.y]==0 && //and free
-                validBuildTile ) //and valid build tile
-        {
-            //Build up
-            board[cursor.x][cursor.y]+=1;
+        //Move cursor to nearest
+        cursor=getNearestPiece(playerTurn,cursor);
 
-            //Next turn
-            nextTurn();
-            gameState=Move;
-
-            //select none
-            resetSelection();
-
-            //Move cursor to nearest
-            cursor=getNearestPiece(playerTurn,cursor);
-        }
         refresh();
+        simulator.waitSDL(1000);
+    }
+    else
+    {
+        moveCursor(true);
+        //First select, then build if possible
+        if (game.buttons.pressed(BTN_A))
+        {
+            if(isNear(selected,cursor) && //only near
+                    isBuildAllowed(cursor)) //and valid build tile
+            {
+                //Build up
+                board[cursor.x][cursor.y]+=1;
+
+                //Next turn
+                nextTurn();
+                gameState=Move;
+
+                //select none
+                resetSelection();
+
+                //Move cursor to nearest
+                cursor=getNearestPiece(playerTurn,cursor);
+            }
+            refresh();
+        }
     }
 }
 
@@ -710,7 +908,7 @@ void drawBoard()
             //Draw players pieces at correct height
             if (pieceTile!=0)
             {
-                zOff=getBoardHeight(x,y);
+                zOff=getBuildHeight(x,y);
                 game.display.directBitmap(p.x,p.y,sprites[pieceTile+zOff],4,1);
             }
 
@@ -829,10 +1027,13 @@ int main ()
                 break;
             }
 
-
             game.display.print(0,0,stateDescription[gameState]);
             if(!isSelected())
                 game.display.print(0,10,"select piece");
+            else
+                game.display.print(0,10,board[selected.x][selected.y]);
+            //debug info
+
 
         }
     }
