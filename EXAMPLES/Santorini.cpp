@@ -285,7 +285,7 @@ bool anyCanMoveThere(short playerTurn,Point there,Point * who)
     return false;
 }
 
-bool findMovement(short fromLevel,short toLevel,Movement * movement)
+bool findMovement(short fromLevel,short toLevel,Point * from,Point * to)
 {
     short bLevelFrom;
     short bLevelTo;
@@ -293,8 +293,8 @@ bool findMovement(short fromLevel,short toLevel,Movement * movement)
     {
         for(short y=1; y<BOARDSIZE-1; y++)
         {
-            movement->from.x=x;
-            movement->from.y=y;
+            from->x=x;
+            from->y=y;
             bLevelFrom=board[x][y];
 
             //Search players pieces
@@ -305,11 +305,11 @@ bool findMovement(short fromLevel,short toLevel,Movement * movement)
                 {
                     for(short yi=1; yi<BOARDSIZE-1; yi++)
                     {
-                        movement->to.x=xi;
-                        movement->to.y=yi;
+                        to->x=xi;
+                        to->y=yi;
                         bLevelTo=board[xi][yi];
 
-                        if(isNear(movement->from,movement->to))
+                        if(isNear(*from,*to))
                         {
                             if ((bLevelFrom==fromLevel && bLevelTo==toLevel))
                             {
@@ -461,12 +461,13 @@ void AI()
 
     //Prepare some useful data
     //Look if a piece can move at top
-    Movement winMove;
-    bool win=findMovement(TILE_LEVEL_2,TILE_LEVEL_3,&winMove);
+    Point winFrom;
+    Point winTo;
+    bool win=findMovement(TILE_LEVEL_2,TILE_LEVEL_3,&winFrom,&winTo);
     short winPiece=-1;
     if(win)
     {
-        winPiece=pieces[winMove.from.x][winMove.from.y];
+        winPiece=pieces[winFrom.x][winFrom.y];
     }
 
     Point highestBuild=findHighestBuild();
@@ -515,7 +516,7 @@ void AI()
         //AI can move to win?
         if(win && winPiece==playerTurn)
         {
-            movePiece(winMove.from,winMove.to);
+            movePiece(winFrom,winTo);
             return;
         }
 
@@ -527,8 +528,8 @@ void AI()
             {
                 for(short yt=-1; yt<2; yt++)
                 {
-                    nearWin.x=winMove.to.x+xt;
-                    nearWin.y=winMove.to.y+yt;
+                    nearWin.x=winTo.x+xt;
+                    nearWin.y=winTo.y+yt;
                     if(anyCanMoveThere(playerTurn,nearWin,&who))
                     {
                         movePiece(who,nearWin);
@@ -547,8 +548,8 @@ void AI()
         {
             for(short yt=-1; yt<2; yt++)
             {
-                nearHighest.x=winMove.to.x+xt;
-                nearHighest.y=winMove.to.y+yt;
+                nearHighest.x=winTo.x+xt;
+                nearHighest.y=winTo.y+yt;
                 if(anyCanMoveThere(playerTurn,nearHighest,&who))
                 {
                     movePiece(who,nearHighest);
@@ -581,9 +582,9 @@ void AI()
         //if opponent can go to level 3 try to block it building a dome
         if(win && winPiece!=playerTurn)
         {
-            if(isNear(selected,winMove.to))
+            if(isNear(selected,winTo))
             {
-                board[winMove.to.x][winMove.to.y]+=1;
+                board[winTo.x][winTo.y]+=1;
                 refresh();
                 return;
             }
