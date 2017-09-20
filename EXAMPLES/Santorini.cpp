@@ -376,8 +376,6 @@ Point searchReacheableNear(short playerTurn,Point from,Point to)
     return mto;
 }
 
-
-
 Point findHighestBuild()
 {
     Point highestPoint;
@@ -517,6 +515,7 @@ void AI()
         if(win && winPiece==playerTurn)
         {
             movePiece(winFrom,winTo);
+            printf("(m1) move to win\n");
             return;
         }
 
@@ -533,6 +532,7 @@ void AI()
                     if(anyCanMoveThere(playerTurn,nearWin,&who))
                     {
                         movePiece(who,nearWin);
+                        printf("(m2) move near win pos\n");
                         return;
                     }
                 }
@@ -553,6 +553,7 @@ void AI()
                 if(anyCanMoveThere(playerTurn,nearHighest,&who))
                 {
                     movePiece(who,nearHighest);
+                    printf("(m3) move near high pos\n");
                     return;
                 }
             }
@@ -569,6 +570,7 @@ void AI()
             if(isMoveAllowed(nearestPiece,randMove))
             {
                 movePiece(nearestPiece,randMove);
+                printf("(m4) random move\n");
                 return;
             }
         }
@@ -586,6 +588,7 @@ void AI()
             {
                 board[winTo.x][winTo.y]+=1;
                 refresh();
+                printf("(b1) block with a dome\n");
                 return;
             }
         }
@@ -606,6 +609,7 @@ void AI()
             {
                 board[randBuild.x][randBuild.y]+=1;
                 refresh();
+                printf("(b2) build random\n");
                 return;
             }
         }
