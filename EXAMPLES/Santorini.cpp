@@ -124,6 +124,22 @@ void to2d(Point * pp)
     pp->y=(2*y-x)/2;
 }
 
+void drawMarkOnGrid(short x,short y,uint16_t color)
+{
+    Point p;
+    p.x=x*TILE_WIDTH+8;
+    p.y=y*TILE_HEIGHT-8;
+    toIso(&p);
+    p.x=p.x;
+    p.y=p.y+48;
+
+    game.display.directPixel(p.x,p.y,color);
+    game.display.directPixel(p.x+1,p.y,color);
+    game.display.directPixel(p.x,p.y+1,color);
+    game.display.directPixel(p.x-1,p.y,color);
+    game.display.directPixel(p.x,p.y-1,color);
+}
+
 short distance(short x1,short y1,short x2, short y2)
 {
     short dx=x1-x2;
@@ -251,10 +267,19 @@ bool anyMoveAllowed(short playerTurn)
     return false;
 }
 
-bool anyCanMoveThere(short playerTurn,Point there,Point * who)
+bool tryMoveThere(short playerTurn,Point target,Point * moveFrom,Point * moveTo)
 {
-    Point from;
-    Point to;
+    Point bestFrom1;
+    Point bestTo1;
+    short p1Distance=9999;
+
+    Point bestFrom2;
+    Point bestTo2;
+    short p2Distance=9999;
+
+    short pN=0;
+    bool allow=false;
+
     for(short x=0; x<BOARDSIZE; x++)
     {
         for(short y=0; y<BOARDSIZE; y++)
@@ -262,27 +287,53 @@ bool anyCanMoveThere(short playerTurn,Point there,Point * who)
             //Search players pieces
             if (isSelecteable(playerTurn,x,y))
             {
-                from.x=x;
-                from.y=y;
+                pN++;
+
                 //Check if can do any move around
-                for(short xt=-1; xt<2; xt++)
+                for(short xt=-3; xt<4; xt++)
                 {
-                    for(short yt=-1; yt<2; yt++)
+                    for(short yt=-3; yt<4; yt++)
                     {
-                        to.x=there.x+xt;
-                        to.y=there.y+yt;
-                        if(isMoveAllowed(from,to))
+                        moveTo->x=target.x+xt;
+                        moveTo->y=target.y+yt;
+
+                        if(isMoveAllowed(*moveFrom,*moveTo))
                         {
-                            who->x=from.x;
-                            who->y=from.y;
-                            return true;
+                            allow=true;
+                            short d=distance(target.x,target.y,moveTo->x,moveTo->y);
+                            if(pN==1 && d<p1Distance)
+                            {
+                                p1Distance=d;
+                                bestFrom1.x=to.x;
+                                bestFrom1.y=to.y;
+                            }
+
+                            if(pN==2 && d<p2Distance)
+                            {
+                                p2Distance=d;
+                                bestFrom2.x=to.x;
+                                bestFrom2.y=to.y;
+                            }
+
                         }
                     }
                 }
             }
         }
     }
-    return false;
+
+    if(p1Distance<p2Distance)
+    {
+        moveFrom->x=bestFrom1.x;
+        moveFrom->y=bestFrom1.y;
+    }
+    else
+    {
+        moveFrom->x=bestFrom2.x;
+        moveFrom->y=bestFrom2.y;
+    }
+
+    return allow;
 }
 
 bool findMovement(short fromLevel,short toLevel,Point * from,Point * to)
@@ -382,9 +433,9 @@ Point findHighestBuild()
     short maxHeight=-1;
     short heigth=0;
 
-    for(short x=0; x<BOARDSIZE; x++)
+    for(short x=1; x<BOARDSIZE-1; x++)
     {
-        for(short y=0; y<BOARDSIZE; y++)
+        for(short y=1; y<BOARDSIZE-1; y++)
         {
             heigth=getBuildHeight(x,y);
             if(heigth>maxHeight)
@@ -454,8 +505,8 @@ void AI()
 {
     short x;
     short y;
-    Point towards;
-    Point who;
+    Point whoMove;
+    Point whereMove;
 
     //Prepare some useful data
     //Look if a piece can move at top
@@ -522,43 +573,26 @@ void AI()
         //Find if I can reach any tiles around win position (to later build there)
         if(win && winPiece!=playerTurn)
         {
-            Point nearWin;
-            for(short xt=-1; xt<2; xt++)
+            if(tryMoveThere(playerTurn,winTo,&whoMove,&whereMove))
             {
-                for(short yt=-1; yt<2; yt++)
-                {
-                    nearWin.x=winTo.x+xt;
-                    nearWin.y=winTo.y+yt;
-                    if(anyCanMoveThere(playerTurn,nearWin,&who))
-                    {
-                        movePiece(who,nearWin);
-                        printf("(m2) move near win pos\n");
-                        return;
-                    }
-                }
+                movePiece(whoMove,whereMove);
+                printf("(m2) move near win pos\n");
+                return;
             }
+
         }
 
 
         //Move near highest build
-        Point nearestPiece=getNearestPiece(playerTurn,highestBuild);
-        towards= moveTowards(nearestPiece,highestBuild);
-        Point nearHighest;
-        for(short xt=-1; xt<2; xt++)
-        {
-            for(short yt=-1; yt<2; yt++)
-            {
-                nearHighest.x=winTo.x+xt;
-                nearHighest.y=winTo.y+yt;
-                if(anyCanMoveThere(playerTurn,nearHighest,&who))
-                {
-                    movePiece(who,nearHighest);
-                    printf("(m3) move near high pos\n");
-                    return;
-                }
-            }
-        }
+        drawMarkOnGrid(highestBuild.x,highestBuild.y,COLOR_RED);
 
+        //
+        if(tryMoveThere(playerTurn,highestBuild,&whoMove,&whereMove))
+        {
+            movePiece(whoMove,whereMove);
+            printf("(m3) move near high pos\n");
+            return;
+        }
 
         //Try a valid random move
         while(true)
@@ -576,7 +610,7 @@ void AI()
         }
     }
 
-    //-----------------------------------------------------
+//-----------------------------------------------------
     if(gameState==Build)
     {
         //if opponent can go to level 3 -> Build a Dome
@@ -782,7 +816,7 @@ void moveRules()
         AI();
         gameState=Build;
         refresh();
-        simulator.waitSDL(1000);
+        simulator.waitSDL(1500);
     }
     else
     {
@@ -852,7 +886,7 @@ void buildRules()
         cursor=getNearestPiece(playerTurn,cursor);
 
         refresh();
-        simulator.waitSDL(1000);
+        simulator.waitSDL(1500);
     }
     else
     {
@@ -935,6 +969,8 @@ void drawBoard()
                     game.display.directBitmap(p.x,p.y,sprites[TILE_CURSOR_P2_SEL],4,1);
 
             }
+
+            //drawMarkOnGrid(x,y,COLOR_YELLOW);
         }
     }
     game.display.invisiblecolor=-1;
