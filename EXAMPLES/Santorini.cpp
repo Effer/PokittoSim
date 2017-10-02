@@ -33,7 +33,11 @@ Pokitto::Core game;
 
 #define BOARDSIZE 7
 
-bool useAI=true;
+#define AI_DELAY 500
+
+bool p1AI=true;
+bool p2AI=true;
+
 uint16_t intro[BOARDSIZE][BOARDSIZE];
 uint16_t board[BOARDSIZE][BOARDSIZE];
 uint16_t pieces[BOARDSIZE][BOARDSIZE];
@@ -59,7 +63,7 @@ short playerTurn=1;
 typedef enum  GameStates
 {
     Intro,
-    InitGame,
+    Initialize,
     Place,
     Move,
     Build,
@@ -78,7 +82,6 @@ const char * stateDescription[] =
     "End",
 };
 
-
 template <typename T>
 T clip(T n, T lower, T upper)
 {
@@ -93,10 +96,9 @@ T lerp(T a, T b, T t)
     return (a + (b - a) * t/100.0);
 }
 
-
 bool anyKey()
 {
-    for (char i; i<NUM_BTN; i++)
+    for (short i=0; i<NUM_BTN; i++)
     {
         if (game.buttons.states[i]!=0)
             return true;
@@ -213,7 +215,7 @@ bool isMoveAllowed(Point from,Point to)
             pieces[to.x][to.y]==0 && //free
             dZ<2 && //max 1 level up
             toLevel!=TILE_LEVEL_4 && //not blocked
-            to.x>0 && to.x<6 && to.y>0 && to.y<6) //inside board
+            to.x>0 && to.x<6 && to.y>0 && to.y<6)   //inside board
     {
         return true;
     }
@@ -270,11 +272,9 @@ bool anyMoveAllowed(short playerTurn)
 bool tryMoveThere(short playerTurn,Point target,Point * moveFrom,Point * moveTo)
 {
     Point bestFrom1;
-    Point bestTo1;
     short p1Distance=9999;
 
     Point bestFrom2;
-    Point bestTo2;
     short p2Distance=9999;
 
     short pN=0;
@@ -304,15 +304,15 @@ bool tryMoveThere(short playerTurn,Point target,Point * moveFrom,Point * moveTo)
                             if(pN==1 && d<p1Distance)
                             {
                                 p1Distance=d;
-                                bestFrom1.x=to.x;
-                                bestFrom1.y=to.y;
+                                bestFrom1.x=moveTo->x;
+                                bestFrom1.y=moveTo->y;
                             }
 
                             if(pN==2 && d<p2Distance)
                             {
                                 p2Distance=d;
-                                bestFrom2.x=to.x;
-                                bestFrom2.y=to.y;
+                                bestFrom2.x=moveTo->x;
+                                bestFrom2.y=moveTo->y;
                             }
 
                         }
@@ -449,6 +449,31 @@ Point findHighestBuild()
     return highestPoint;
 }
 
+void findPieces(short playerTurn, Point * p1,Point * p2)
+{
+    short n=0;
+    for(short x=1; x<BOARDSIZE-1; x++)
+    {
+        for(short y=1; y<BOARDSIZE-1; y++)
+        {
+            if(pieces[x][y]==playerTurn)
+            {
+                n++;
+                if(n==1)
+                {
+                    p1->x=x;
+                    p1->y=y;
+                }
+                if(n==2)
+                {
+                    p2->x=x;
+                    p2->y=y;
+                }
+            }
+        }
+    }
+}
+
 Point moveTowards(Point from,Point to)
 {
     //get direction
@@ -491,7 +516,7 @@ void movePiece(Point from,Point to)
     selected.y=to.y;
 }
 
-short nextTurn()
+void nextTurn()
 {
     playerTurn=playerTurn==1?2:1;
 }
@@ -507,6 +532,8 @@ void AI()
     short y;
     Point whoMove;
     Point whereMove;
+    Point piece1;
+    Point piece2;
 
     //Prepare some useful data
     //Look if a piece can move at top
@@ -520,7 +547,10 @@ void AI()
     }
 
     Point highestBuild=findHighestBuild();
+    Point nearestPiece=getNearestPiece(playerTurn,highestBuild);
 
+    //Find pieces position
+    findPieces(playerTurn,&piece1,&piece2);
 
     //-----------------------------------------------------
     if(gameState==Place)
@@ -561,8 +591,6 @@ void AI()
     if(gameState==Move)
     {
         //Try to win moving at level 3
-
-        //AI can move to win?
         if(win && winPiece==playerTurn)
         {
             movePiece(winFrom,winTo);
@@ -573,19 +601,35 @@ void AI()
         //Find if I can reach any tiles around win position (to later build there)
         if(win && winPiece!=playerTurn)
         {
-            if(tryMoveThere(playerTurn,winTo,&whoMove,&whereMove))
+            //Try position around
+            for(uint8_t x=-1; x<1; x++)
             {
-                movePiece(whoMove,whereMove);
-                printf("(m2) move near win pos\n");
-                return;
+                for(uint8_t y=-1; y<1; y++)
+                {
+                    whereMove.x=winTo.x+x;
+                    whereMove.y=winTo.y+y;
+
+                    //Try piece 1
+                    if(isMoveAllowed(piece1,whereMove))
+                    {
+                        movePiece(piece1,whereMove);
+                        printf("(m2) piece 1 move near win pos\n");
+                        return;
+                    }
+
+                    //Try piece 2
+                    if(isMoveAllowed(piece2,whereMove))
+                    {
+                        movePiece(piece2,whereMove);
+                        printf("(m2) piece2 move near win pos\n");
+                        return;
+                    }
+                }
             }
-
         }
-
 
         //Move near highest build
         drawMarkOnGrid(highestBuild.x,highestBuild.y,COLOR_RED);
-
         //
         if(tryMoveThere(playerTurn,highestBuild,&whoMove,&whereMove))
         {
@@ -658,12 +702,9 @@ void initBoard()
     resetSelection();
 
     //Players tiles
-    char x;
-    char y;
-    char players[]= {1,1,2,2};
     playerTurn=random(1,2);
 
-    //Reset pieces
+    //Reset players pieces
     for(uint8_t x=0; x<BOARDSIZE; x++)
     {
         for(uint8_t y=0; y<BOARDSIZE; y++)
@@ -672,23 +713,7 @@ void initBoard()
         }
     }
 
-//    //Place random
-//    for (char i=0; i<4; i++)
-//    {
-//        while(true)
-//        {
-//            x=random(1,BOARDSIZE-2);
-//            y=random(1,BOARDSIZE-2);
-//
-//            if(pieces[x][y]==0)
-//            {
-//                pieces[x][y]=players[i];
-//                break;
-//            }
-//        }
-//    }
-
-    //Initialize board with flat land
+    //Initialize board
     for(uint8_t x=0; x<BOARDSIZE; x++)
     {
         for(uint8_t y=0; y<BOARDSIZE; y++)
@@ -719,7 +744,6 @@ void moveCursorSnap()
 
 void moveCursor(bool onlyNearSelected)
 {
-
     Point newCursor;
     newCursor.x=cursor.x;
     newCursor.y=cursor.y;
@@ -765,11 +789,9 @@ void moveCursor(bool onlyNearSelected)
         }
     }
 
-    if(refresh)
-    {
-        cursor.x=newCursor.x;
-        cursor.y=newCursor.y;
-    }
+    //Save cursor position
+    cursor.x=newCursor.x;
+    cursor.y=newCursor.y;
 
 #ifdef DEBUG
     if (game.buttons.pressed(BTN_C))
@@ -782,7 +804,7 @@ void moveCursor(bool onlyNearSelected)
 
 void placeRules()
 {
-    if(useAI && playerTurn==2)
+    if((p1AI && playerTurn==1) || (p2AI && playerTurn==2))
     {
         AI();
         nextTurn();
@@ -811,16 +833,15 @@ void placeRules()
 
 void moveRules()
 {
-    if(useAI && playerTurn==2)
+    if((p1AI && playerTurn==1) || (p2AI && playerTurn==2))
     {
         AI();
         gameState=Build;
         refresh();
-        simulator.waitSDL(1500);
+        game.wait(AI_DELAY);
     }
     else
     {
-
         //free move if selected, otherwise snap to players
         if(isSelected())
         {
@@ -875,7 +896,7 @@ void moveRules()
 
 void buildRules()
 {
-    if(useAI && playerTurn==2)
+    if((p1AI && playerTurn==1) || (p2AI && playerTurn==2))
     {
         AI();
         nextTurn();
@@ -886,7 +907,7 @@ void buildRules()
         cursor=getNearestPiece(playerTurn,cursor);
 
         refresh();
-        simulator.waitSDL(1500);
+        game.wait(AI_DELAY);
     }
     else
     {
@@ -895,7 +916,7 @@ void buildRules()
         if (game.buttons.pressed(BTN_A))
         {
             if(isNear(selected,cursor) && //only near
-                    isBuildAllowed(cursor)) //and valid build tile
+                    isBuildAllowed(cursor))   //and valid build tile
             {
                 //Build up
                 board[cursor.x][cursor.y]+=1;
@@ -912,6 +933,14 @@ void buildRules()
             }
             refresh();
         }
+    }
+}
+
+void endRules()
+{
+    if(anyKey())
+    {
+        gameState=Intro;
     }
 }
 
@@ -978,15 +1007,7 @@ void drawBoard()
 
 void drawIntro()
 {
-    game.display.clear();
-
-    int x=random(0,game.display.width);
-    int y=random(0,game.display.height);
-    int w=random(0,game.display.width);
-    int h=random(0,game.display.height);
-    int c=random(65535);
-    //game.display.directRectangle(x,y,w,h,c);
-
+    //Clean
     game.display.directRectangle(0,0,game.display.width,game.display.height,0);
 
     game.display.invisiblecolor=0;
@@ -1004,8 +1025,8 @@ void drawIntro()
         }
     }
 
-    x=random(0,6);
-    y=random(0,6);
+    short x=random(0,6);
+    short y=random(0,6);
     intro[x][y]=(intro[x][y]+1)%6;
 
     game.display.print(game.display.width/2,game.display.height-16, "Press any key..");
@@ -1027,13 +1048,15 @@ void drawGame()
     }
 }
 
-
+void drawEnd()
+{
+    game.display.print(game.display.width/2,game.display.height/2, "GAME OVER");
+    game.display.print(game.display.width/2,game.display.height-16, "Press any key..");
+}
 
 int main ()
 {
     game.begin();
-
-    //load sprite palette
     game.display.load565Palette(sprite_pal);
     game.display.enableDirectPrinting(1);
 
@@ -1045,34 +1068,42 @@ int main ()
         {
             switch(gameState)
             {
-            case Intro:
+            case GameStates::Intro:
                 drawIntro();
                 break;
-            case Place:
+
+            case GameStates::Initialize:
+                drawIntro();
+                break;
+
+            case GameStates::Place:
                 placeRules();
                 drawGame();
                 break;
-            case Move:
+
+            case GameStates::Move:
                 moveRules();
                 drawGame();
                 break;
-            case Build:
+
+            case GameStates::Build:
                 buildRules();
                 drawGame();
                 break;
 
-            case End:
-                drawGame();
+            case GameStates::End:
+                endRules();
+                drawEnd();
                 break;
-            case Credits:
+
+            case GameStates::Credits:
                 break;
             }
 
+            //debug info
             game.display.print(0,0,stateDescription[gameState]);
-            if(!isSelected())
-                game.display.print(0,10,"select piece");
-            else
-                game.display.print(0,10,board[selected.x][selected.y]);
+            if(!isSelected() && gameState!=GameStates::Place)
+                game.display.print(0,10,"Select piece");
             //debug info
 
 
