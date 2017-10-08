@@ -940,7 +940,7 @@ void endRules()
 {
     if(anyKey())
     {
-        gameState=Intro;
+        gameState=Initialize;
     }
 }
 
@@ -1033,7 +1033,7 @@ void drawIntro()
     game.display.invisiblecolor=-1;
 
     if (anyKey())
-        gameState=Place;
+        gameState=Initialize;
 }
 
 void drawGame()
@@ -1050,6 +1050,11 @@ void drawGame()
 
 void drawEnd()
 {
+    resetSelection();
+    cursor.x=-1;
+    cursor.y=-1;
+    refresh();
+    drawGame();
     game.display.print(game.display.width/2,game.display.height/2, "GAME OVER");
     game.display.print(game.display.width/2,game.display.height-16, "Press any key..");
 }
@@ -1060,44 +1065,43 @@ int main ()
     game.display.load565Palette(sprite_pal);
     game.display.enableDirectPrinting(1);
 
-    initBoard();
-
     while (game.isRunning())
     {
         if (game.update(true))
         {
             switch(gameState)
             {
-            case GameStates::Intro:
-                drawIntro();
-                break;
+                case GameStates::Intro:
+                    drawIntro();
+                    break;
 
-            case GameStates::Initialize:
-                drawIntro();
-                break;
+                case GameStates::Initialize:
+                    initBoard();
+                    gameState=Place;
+                    break;
 
-            case GameStates::Place:
-                placeRules();
-                drawGame();
-                break;
+                case GameStates::Place:
+                    placeRules();
+                    drawGame();
+                    break;
 
-            case GameStates::Move:
-                moveRules();
-                drawGame();
-                break;
+                case GameStates::Move:
+                    moveRules();
+                    drawGame();
+                    break;
 
-            case GameStates::Build:
-                buildRules();
-                drawGame();
-                break;
+                case GameStates::Build:
+                    buildRules();
+                    drawGame();
+                    break;
 
-            case GameStates::End:
-                endRules();
-                drawEnd();
-                break;
+                case GameStates::End:
+                    endRules();
+                    drawEnd();
+                    break;
 
-            case GameStates::Credits:
-                break;
+                case GameStates::Credits:
+                    break;
             }
 
             //debug info
