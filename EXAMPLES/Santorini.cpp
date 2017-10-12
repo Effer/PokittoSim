@@ -890,6 +890,10 @@ void moveRules()
     if(!anyMoveAllowed(playerTurn) || board[selected.x][selected.y]==TILE_LEVEL_3)
     {
         gameState=End;
+        cursor.x=-1;
+        cursor.y=-1;
+        resetSelection();
+        refresh();
     }
 }
 
@@ -1041,6 +1045,7 @@ void drawGame()
     if(_refresh)
     {
         _refresh=false;
+        printf("refresh");
         //Clear screen
         game.display.directRectangle(0,0,game.display.width,game.display.height,0);
         //Draw
@@ -1050,10 +1055,6 @@ void drawGame()
 
 void drawEnd()
 {
-    resetSelection();
-    cursor.x=-1;
-    cursor.y=-1;
-    refresh();
     drawGame();
     game.display.print(game.display.width/2,game.display.height/2, "GAME OVER");
     game.display.print(game.display.width/2,game.display.height-16, "Press any key..");
@@ -1071,42 +1072,42 @@ int main ()
         {
             switch(gameState)
             {
-                case GameStates::Intro:
+                case Intro:
                     drawIntro();
                     break;
 
-                case GameStates::Initialize:
+                case Initialize:
                     initBoard();
                     gameState=Place;
                     break;
 
-                case GameStates::Place:
+                case Place:
                     placeRules();
                     drawGame();
                     break;
 
-                case GameStates::Move:
+                case Move:
                     moveRules();
                     drawGame();
                     break;
 
-                case GameStates::Build:
+                case Build:
                     buildRules();
                     drawGame();
                     break;
 
-                case GameStates::End:
+                case End:
                     endRules();
                     drawEnd();
                     break;
 
-                case GameStates::Credits:
+                case Credits:
                     break;
             }
 
             //debug info
             game.display.print(0,0,stateDescription[gameState]);
-            if(!isSelected() && gameState!=GameStates::Place)
+            if(!isSelected() && gameState!=Place)
                 game.display.print(0,10,"Select piece");
             //debug info
 
